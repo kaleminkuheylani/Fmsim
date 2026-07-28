@@ -64,30 +64,14 @@ class Classifier:
         self.n_actions = n_actions
 
     def forward(self, s):
-        # s: (B, 8) veya (8,)
         if s.ndim == 1:
             s = s.reshape(1, -1)
-        h_pre = s @ self.W1.T + self.b1  # (B, hidden)
+        h_pre = s @ self.W1.T + self.b1
         h = np.maximum(0, h_pre)
-        logits = h @ self.W2.T + self.b2  # (B, n_actions)
-        # softmax
+        logits = h @ self.W2.T + self.b2
         e = np.exp(logits - logits.max(axis=1, keepdims=True))
         probs = e / e.sum(axis=1, keepdims=True)
         return h_pre, h, logits, probs
-
-    def backward(self, h_pre, h, probs, target_action, target_onehot):
-        """Cross-entropy gradient."""
-        B = probs.shape[0]
-        # d_logits = (probs - onehot) / B
-        d_logits = (probs - target_onehot) / B
-        dW2 = d_logits.T @ h
-        db2 = d_logits.sum(axis=0)
-        d_h = d_logits @ self.W2
-        d_h_pre = d_h * (h_pre > 0)
-        # h_pre = s @ W1.T + b1 → dW1 = d_h_pre.T @ s
-        # s tek olabilir, batch olabilir
-        # Bu durumda s'yi forward'da saklamak gerek, şimdilik outer product
-        return dW2, db2, d_h_pre
 
 class Adam:
     def __init__(self, params, lr=3e-3, b1=0.9, b2=0.999, eps=1e-8):
@@ -109,47 +93,67 @@ class Adam:
 
 
 # === TRAIN ===
-def train_supervised(states, actions, n_actions=5, hidden=32, epochs=30, batch_size=64, lr=3e-3):
-    """Supervised learning: state → action (imitation)."""
+def train_supervised(states, actions, rewards, n_actions=5, hidden=32, epochs=30, batch_size=64, lr=3e-3):
+    """Supervised learning: state → action (imitation) + reward-weighted loss.
+
+    Class weight: azınlık sınıfları (cross, passLong, shoot) daha çok öğren.
+    """
     N = len(states)
     model = Classifier(hidden=hidden, n_actions=n_actions)
     adam = Adam([model.W1, model.b1, model.W2, model.b2], lr=lr)
+
+    # Class weight: 1 / frequency ile sık olmayan sınıfları daha çok öğren
+    class_counts = np.bincount(actions, minlength=n_actions)
+    class_weight = (N / (n_actions * class_counts + 1)).astype(np.float32)
+    # Çok agresif olmasın
+    class_weight = np.minimum(class_weight, 5.0)
+    print(f"Class weight: " + " ".join(f"a{i}={class_weight[i]:.2f}" for i in range(n_actions)))
+
+    # Reward-based sample weight: yüksek reward'lu transition'lar daha önemli
+    reward_weight = 1.0 + np.tanh(rewards / 2.0)  # -3/+10 → 0-1+1 = 0-2
 
     print(f"Classifier: 8 → {hidden} → {n_actions}")
     print(f"Eğitim: {epochs} epoch, batch {batch_size}, lr {lr}\n")
 
     for epoch in range(epochs):
-        # Shuffle
         perm = np.random.permutation(N)
         total_loss = 0.0
         n_batches = 0
         n_correct = 0
         n_total = 0
+        action_pred = np.zeros(n_actions, dtype=np.int32)
 
         for start in range(0, N, batch_size):
             idx = perm[start:start + batch_size]
             s_batch = states[idx]
             a_batch = actions[idx]
+            cw = class_weight[a_batch]
+            rw = reward_weight[idx]
 
-            # One-hot
+            # One-hot (class weight uygulanmış)
             onehot = np.zeros((len(idx), n_actions), dtype=np.float32)
             onehot[np.arange(len(idx)), a_batch] = 1.0
+            # Sample weight: cw * rw (normalize edilecek)
+            sample_w = (cw * rw).reshape(-1, 1)
+            sample_w = sample_w / (sample_w.sum() + 1e-6) * len(idx)  # normalize
 
             # Forward
             h_pre, h, logits, probs = model.forward(s_batch)
 
-            # Cross-entropy loss
-            loss = -np.log(probs[np.arange(len(idx)), a_batch] + 1e-9).mean()
+            # Weighted cross-entropy
+            ce = -np.log(probs[np.arange(len(idx)), a_batch] + 1e-9)
+            loss = (ce * sample_w.flatten()).sum() / len(idx)
             total_loss += loss
             n_batches += 1
 
-            # Accuracy
+            # Accuracy (ağırlıksız, doğru ölçüm)
             preds = probs.argmax(axis=1)
             n_correct += (preds == a_batch).sum()
             n_total += len(idx)
+            action_pred += np.bincount(preds, minlength=n_actions)
 
-            # Backward
-            d_logits = (probs - onehot) / len(idx)
+            # Backward (sample weight uygulanmış)
+            d_logits = (probs - onehot) * sample_w / len(idx)
             dW2 = d_logits.T @ h
             db2 = d_logits.sum(axis=0)
             d_h = d_logits @ model.W2
@@ -157,7 +161,6 @@ def train_supervised(states, actions, n_actions=5, hidden=32, epochs=30, batch_s
             dW1 = d_h_pre.T @ s_batch
             db1 = d_h_pre.sum(axis=0)
 
-            # Adam step
             new_params = adam.step(
                 [model.W1, model.b1, model.W2, model.b2],
                 [dW1, db1, dW2, db2]
@@ -166,14 +169,16 @@ def train_supervised(states, actions, n_actions=5, hidden=32, epochs=30, batch_s
 
         avg_loss = total_loss / n_batches
         acc = n_correct / n_total
+        pct = action_pred / max(1, action_pred.sum())
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            print(f"  epoch {epoch+1:3d}/{epochs} | loss {avg_loss:.4f} | accuracy {acc:.1%}", flush=True)
+            print(f"  epoch {epoch+1:3d}/{epochs} | loss {avg_loss:.4f} | acc {acc:.1%} | "
+                  f"pred: shoot {pct[0]:.1%} cross {pct[1]:.1%} pS {pct[2]:.1%} pL {pct[3]:.1%} dribble {pct[4]:.1%}", flush=True)
 
     return model
 
 # === MAIN ===
 t0 = time.time()
-model = train_supervised(states, actions, n_actions=N_ACTIONS, hidden=32, epochs=40, batch_size=64, lr=3e-3)
+model = train_supervised(states, actions, rewards, n_actions=N_ACTIONS, hidden=32, epochs=40, batch_size=64, lr=3e-3)
 elapsed = time.time() - t0
 print(f"\nEğitim süresi: {elapsed:.1f}s")
 
