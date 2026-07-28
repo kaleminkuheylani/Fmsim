@@ -69,12 +69,19 @@ function shouldShoot(player, match) {
 
   // Şut aralığı (intelligence + taktik + pozisyon)
   const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
-  let shootRange = 30 + (intel - 50) / 5 + tactic.shootRange; // 20-40 arası (çok agresif)
-  if (player.position === 'FV') shootRange += 8; // FV çok uzak şut atar
+  let shootRange = 50 + (intel - 50) / 5 + tactic.shootRange; // 40-60 arası (xG: uzak şutlar da denenir)
+  if (player.position === 'FV') shootRange += 10; // FV 50-70m (orta sahadan şut)
 
   const goalX = side === 'home' ? 100 : 0;
   const distToGoal = Math.hypot(ball.x - goalX, ball.y - 35);
   if (distToGoal > shootRange) return false;
+
+  // Uzak şutlar için yeterli şut gücü (xG: uzak şut zaten düşük gol şansı,
+  // ama denemek mantıklı — gerçek maçlarda her 90dk 20-25 şut atılır)
+  if (distToGoal > 18) {
+    const shootPower = finishing * 0.6 + composure * 0.4;
+    if (shootPower < 40) return false; // 40+ yeterli (önce 55 çok yüksekti)
+  }
 
   // Kutuda: neredeyse her zaman şut (oyuncu bitirmeli)
   if (inBox) {
@@ -82,19 +89,19 @@ function shouldShoot(player, match) {
     return true;
   }
 
-  // Kutunun dışında: blok var mı kontrol et
+  // Kutunun dışında: sadece çok yakın rakip varsa blokla (3m)
   const opp = side === 'home' ? match.away : match.home;
   const opponentsBlocking = opp.players.filter(p => {
     if (!p.onField || p.position === 'GK') return false;
     const d = distPointToSegment(p.live.x, p.live.y, ball.x, ball.y, goalX, 35);
-    return d < 5;
+    return d < 3;
   }).length;
   if (opponentsBlocking > 0) return false;
 
-  // Uzak şut: yetenekli oyuncu (composure 50+ ve finishing 55+)
+  // Uzak şut: yetenekli oyuncu (xG: orta seviye yeterli, kalite xG'yi artırır)
   if (distToGoal > 18) {
     const shootPower = finishing * 0.6 + composure * 0.4;
-    if (shootPower < 55) return false;
+    if (shootPower < 40) return false; // 40+ yeterli
   }
 
   return true;
