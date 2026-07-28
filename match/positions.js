@@ -186,88 +186,100 @@ export function updatePositions(match) {
         }
         targetY = base.y + (ballY - 35) * 0.5;
       } else if (p.position === 'DF') {
-        // === ZONE DEFENSE ===
-        // Her DF kendi sorumluluk bölgesinde kalır. Topa tam olarak kovalamaz,
-        // "kale ile top arasında" cover pozisyonu alır. Y-shift sınırlı.
+        // === YÜKSEK SAVUNMA HATTI / ZONE DEFENSE ===
+        // Hücumdayken savunma hattı öne çıkar (kompakt hücum, DF orta sahada)
+        // Savunurken zone koru, topa yakınsa akıllı pres
         const ownGoalX = teamSide === 'home' ? 0 : 100;
-        // Sorumluluk bölgesi: DF'nin base.y'sinden max 6m sapma
         const yShiftMax = 6;
-        // Topun kendi kalesine uzaklığı (tehdit seviyesi)
         const ballDistToOwnGoal = Math.abs(ballX - ownGoalX);
         const threat = Math.max(0, 1 - ballDistToOwnGoal / 50);
 
         if (isMyBall) {
-          // Hücumdayız: savunma hattını koru, sadece hafif öne çık
-          targetX = base.x + teamForward * 3;
-          // Y: topun tarafına hafif kay (max 6m), DF bölgesini koruyarak
-          const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.20));
+          // === YÜKSEK SAVUNMA HATTI ===
+          // Top bizdeyken DF 8m öne çıkar — orta sahaya kadar yükselir
+          // (kompakt hücum, ileri uçta birikme, iç içe girmesin)
+          targetX = base.x + teamForward * 8;
+          // Y: topun tarafına hafif kay (max 6m)
+          const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.25));
           targetY = base.y + yShift;
         } else {
-          // Savunuyoruz — threat seviyesine göre
-          if (distToBall < 8) {
-            // Çok yakın: topa pres (sadece 1 DF çıkar, diğerleri pozisyonda kalır)
+          // === AKILLI PRES ===
+          // 1. pressör: en yakın DF top taşıyıcıya pres yapar
+          // Diğer DF'ler: kale-top arası cover + pas yolu kapatma
+          if (distToBall < 10) {
+            // Çok yakın: topa pres (akıllı: mesafeye göre)
             targetX = ballX + teamForward * -1;
             targetY = ballY;
-          } else if (distToBall < 18) {
+          } else if (distToBall < 20) {
             // Orta: cover pozisyon — kale ile top arasında
             const coverX = (ownGoalX + ballX) / 2;
             targetX = Math.max(coverX - 2, base.x + teamForward * -2);
-            // Y: topun tarafına ama max 6m (zone korunarak)
             const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.4));
             targetY = base.y + yShift;
           } else {
-            // Uzak: formasyon pozisyonunda kal, zone'u koru
-            // Tehdit yüksekse biraz geri çekil
+            // Uzak: formasyon pozisyonunda kal
             targetX = base.x + teamForward * (-2 * (0.5 + threat * 0.5));
-            // Y: çok az kay (sadece tehlike varsa), max 4m
             const yShift = Math.max(-4, Math.min(4, (ballY - base.y) * 0.10 * (0.5 + threat)));
             targetY = base.y + yShift;
           }
         }
       } else if (p.position === 'OS') {
-        // OS: hem orta saha hem savunma yardımı. Y-shift sınırlı (8m)
+        // === KOMPAKT ORTA SAHA ===
+        // Hücumda: OS 6m öne, kompakt hücuma katılır
+        // Savunmada: top 8m yakınsa pres, 18m yakınsa cover
         const yShiftMax = 8;
         if (isMyBall) {
+          // Hücumda: orta saha 6m ileri, kompakt (DF 8m + OS 6m = 14m, FV 12m)
           if (distToBall < 10) {
+            // Top yakın: pas almaya yaklaş
             targetX = ballX + teamForward * 2;
             const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.3));
             targetY = base.y + yShift;
           } else if (distToBall < 25) {
-            targetX = base.x + teamForward * 5;
+            // Orta: kompakt hücum hattı
+            targetX = base.x + teamForward * 6;
             const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.3));
             targetY = base.y + yShift;
           } else {
-            targetX = base.x + teamForward * 4;
+            // Uzak: ileri koş, gol pozisyonu
+            targetX = base.x + teamForward * 7;
             const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.2));
             targetY = base.y + yShift;
           }
         } else {
-          if (distToBall < 8) {
+          // === AKILLI PRES (orta saha en aktif presör) ===
+          if (distToBall < 10) {
+            // Çok yakın: topa pres (1. pressör)
             targetX = ballX + teamForward * -1;
             targetY = ballY;
-          } else if (distToBall < 18) {
+          } else if (distToBall < 20) {
+            // Orta: pas yolunu kapat (2. pressör) — top ile orta noktada
             targetX = Math.max(base.x + teamForward * -2, ballX + teamForward * -2);
             const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.5));
             targetY = base.y + yShift;
           } else {
-            targetX = base.x + teamForward * -2;
+            // Uzak: kale-top arası cover
+            targetX = base.x + teamForward * -3;
             const yShift = Math.max(-yShiftMax, Math.min(yShiftMax, (ballY - base.y) * 0.2));
             targetY = base.y + yShift;
           }
         }
       } else if (p.position === 'FV') {
         if (isMyBall) {
+          // === İLERİ UÇTA BİRİKSİN ===
+          // FV en ileri pozisyon (12m), hücum hattı oluşturur
+          // (spacing: FV'ler birbirine en az 10m mesafede)
           if (distToBall < 12) {
             // Çok yakın: gol pozisyonu, kaleye yönel
             targetX = Math.min(95, Math.max(5, ballX + teamForward * 6));
             targetY = base.y + (ballY - base.y) * 0.5;
           } else if (distToBall < 25) {
-            // Orta: topa koş
-            targetX = base.x + teamForward * 8;
+            // Orta: topa koş, gol pozisyonu
+            targetX = base.x + teamForward * 12;
             targetY = base.y + (ballY - base.y) * 0.5;
           } else {
-            // Uzak: öne koş, gol için pozisyon al
-            targetX = base.x + teamForward * 10;
+            // Uzak: ileri uçta biriksin (formationPos + 12m, spacing koru)
+            targetX = base.x + teamForward * 12;
             targetY = base.y;
           }
         } else {
@@ -338,6 +350,19 @@ export function updatePositions(match) {
       // Sahadan taşmayı engelle (x: 0-100, y: 0-70)
       targetX = Math.max(2, Math.min(98, targetX));
       targetY = Math.max(2, Math.min(68, targetY));
+
+      // === SPACING: aynı takımdaki oyuncular birbirine 8m+ mesafede olmalı ===
+      // (iç içe girmesin — formationPos.y'ye göre spacing)
+      const teamMates = team.players.filter(t => t.onField && t.id !== p.id);
+      for (const tm of teamMates) {
+        const d = Math.hypot(tm.live.x - targetX, tm.live.y - targetY);
+        if (d < 8 && d > 0.1) {
+          // Çok yakın — formationPos y'ye göre dışa doğru kay
+          const direction = (base.y >= 35) ? 1 : -1;
+          if (targetY < 5 || targetY > 65) break; // sınırda
+          targetY += direction * Math.min(2, (8 - d) * 0.6);
+        }
+      }
 
       const dx = targetX - p.live.x;
       const dy = targetY - p.live.y;
