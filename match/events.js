@@ -212,11 +212,10 @@ function resolveShoot(match, carrier) {
     ? Math.hypot(match.ballPos.x - PITCH.homeGoal.x, match.ballPos.y - PITCH.homeGoal.y)
     : Math.hypot(match.ballPos.x - PITCH.awayGoal.x, match.ballPos.y - PITCH.awayGoal.y);
 
-  // Şut zorluğu: mesafe + açı + kaleci
-  // InBox'ta düşük (kolay bitiricilik), uzak şutta yüksek ama abartısız
+  // Şut zorluğu: mesafe + açı + kaleci (gerçekçi — inBox'ta daha kolay)
   let difficulty = inBox
-    ? 40 + distanceToGoal * 0.3
-    : 45 + distanceToGoal * 0.35;
+    ? 32 + distanceToGoal * 0.3   // inBox: kolay bitiricilik
+    : 42 + distanceToGoal * 0.35; // uzak: daha zor
 
   // Şut kontrolü — hangi yetenek kullanılacak?
   // InBox'ta finishing, dışarıda shooting (uzaktan longShots ekleme şutu zorlaştırır)
@@ -237,15 +236,15 @@ function resolveShoot(match, carrier) {
   const saveAction = inBox ? 'gkOneOnOne' : 'reflexes';
   const saveCtx = { action: 'save', distance: distanceToGoal };
 
-  // Basit kurtarış formülü: save_skill + bonus < shot_skill + bonus → gol
-  // InBox'ta kaleci +8 bonus (yakın mesafe bile riskli), uzak şutta kaleci +3 bonus
+  // Gerçekçi kurtarış formülü: inBox'ta kaleci orta avantajlı, uzak şutta kaleci zor
+  // Gerçek maçlarda: inBox gol/şut %35, uzak %5-8
   const shotSkill = getEffective(carrier, action, shootCtx);
   const saveSkill = getEffective(keeper, saveAction, saveCtx);
-  const inBoxBonus = inBox ? 8 : 3;
-  const longShotBonus = !inBox && distanceToGoal > 20 ? 0 : 0;
-  // Eşitlik durumunda kaleci kazansın, ama daha geniş varyans (dramatik gol/şans)
-  const variance = (Math.random() - 0.5) * 18;
-  const isGoal = (shotSkill + longShotBonus + variance) > (saveSkill + inBoxBonus);
+  const inBoxBonus = inBox ? 5 : 4; // kaleci avantajı (gerçekçi: inBox 5, uzak 4)
+  const longShotBonus = !inBox && distanceToGoal > 20 ? 3 : 0; // uzak şutta kaleci zor
+  // Varyans (kaleci veya şutçü şanslı olabilir)
+  const variance = (Math.random() - 0.5) * 20;
+  const isGoal = (shotSkill + variance) > (saveSkill + inBoxBonus + longShotBonus);
 
   carrier.live.shots++;
   match.stats.shots[side]++;

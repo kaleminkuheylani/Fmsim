@@ -68,8 +68,8 @@ function shouldShoot(player, match) {
 
   // Şut aralığı (intelligence + taktik + pozisyon)
   const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
-  let shootRange = 18 + (intel - 50) / 5 + tactic.shootRange; // 8-28 arası (sıkılaştırıldı)
-  if (player.position === 'FV') shootRange += 4; // FV biraz daha uzak
+  let shootRange = 30 + (intel - 50) / 5 + tactic.shootRange; // 20-40 arası (çok agresif)
+  if (player.position === 'FV') shootRange += 8; // FV çok uzak şut atar
 
   const goalX = side === 'home' ? 100 : 0;
   const distToGoal = Math.hypot(ball.x - goalX, ball.y - 35);
@@ -90,10 +90,10 @@ function shouldShoot(player, match) {
   }).length;
   if (opponentsBlocking > 0) return false;
 
-  // Uzak şut: yetenekli oyuncu (composure 65+ ve finishing 65+)
-  if (distToGoal > 16) {
+  // Uzak şut: yetenekli oyuncu (composure 50+ ve finishing 55+)
+  if (distToGoal > 18) {
     const shootPower = finishing * 0.6 + composure * 0.4;
-    if (shootPower < 60) return false;
+    if (shootPower < 55) return false;
   }
 
   return true;
@@ -263,21 +263,20 @@ export function decideAction(player, match) {
     return decideForGoalkeeper(player, match);
   }
 
-  // 1) PPO RL policy — gerçek Fmsim verisinden öğrendi (5 action)
-  // PPO aksiyonu: shoot, cross, passShort, passLong, dribble
-  // Real veriyle eğitildiği için rule-based'den daha gerçekçi kararlar.
+  // 1) ŞUT — kale yakınsa (PPO'dan önce — gerçek maçlarda kaleye yakın oyuncu şut atar)
+  if (shouldShoot(player, match)) return 'shoot';
+
+  // 2) PPO RL policy — gerçek Fmsim verisinden öğrendi (5 action)
   const ppoAction = ppoDecide(player, match);
   if (ppoAction) {
-    // PPO 'shoot' dediyse → kural kontrolü (sadece uygunsa)
-    if (ppoAction === 'shoot' && shouldShoot(player, match)) return 'shoot';
+    if (ppoAction === 'shoot') return 'shoot';
     if (ppoAction === 'cross' && shouldCross(player, match)) return 'cross';
     if (ppoAction === 'passShort') return 'passShort';
     if (ppoAction === 'passLong') return 'passLong';
     if (ppoAction === 'dribble') return 'dribble';
   }
 
-  // 2) PPO yoksa veya guard başarısız → rule-based fallback
-  if (shouldShoot(player, match)) return 'shoot';
+  // 3) PPO yoksa veya guard başarısız → rule-based fallback
   if (shouldCross(player, match)) return 'cross';
   if (shouldPass(player, match)) return pickPassType(player, match);
   if (shouldHoldOrRecycle(player, match)) {
