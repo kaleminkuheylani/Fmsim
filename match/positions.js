@@ -134,6 +134,14 @@ export function updatePositions(match) {
   for (const teamSide of ['home', 'away']) {
     const team = match[teamSide];
     const isMyBall = side === teamSide;
+    // === TOP KENDI YARISINDA MI? (formasyon geçişi) ===
+    // home soldan sağa hücum eder, x<50 = kendi yarısı
+    // away sağdan sola hücum eder, x>50 = kendi yarısı
+    const ownHalfMax = teamSide === 'home' ? 50 : 50;
+    const ballInOwnHalf = teamSide === 'home' ? ball.x < ownHalfMax : ball.x > ownHalfMax;
+    // Top kendi yarısındaysa takım geri çekilir (savunma dizilimi)
+    const teamCompactness = isMyBall ? 0 : (ballInOwnHalf ? 0.6 : 0.3);
+
     for (const p of team.players) {
       if (!p.onField) continue;
 
@@ -154,6 +162,16 @@ export function updatePositions(match) {
       // === TAKIM YÖNÜ ===
       // home soldan sağa, away sağdan sola hücum eder
       const teamForward = teamSide === 'home' ? 1 : -1;
+
+      // === FORMASYON GEÇİŞİ: top kendi yarısındaysa takım kompakt geri çekilir ===
+      if (!isMyBall && ballInOwnHalf && p.position !== 'GK') {
+        // Savunma yardımı: tüm hat geri, kompakt
+        const compactShift = p.position === 'DF' ? -3
+                           : p.position === 'OS' ? -5
+                           : p.position === 'FV' ? -8
+                           : 0;
+        targetX = base.x + teamForward * compactShift * (1 - teamCompactness);
+      }
 
       if (p.position === 'GK') {
         // Kaleci: top ceza sahasına yaklaşırsa öne çıkar (kendi kalesine doğru yön)
@@ -282,23 +300,38 @@ export function updatePositions(match) {
         if (p.position === 'FV') targetX += teamForward * 4; // forvet yüksekte bekler
       }
 
-      // === HAREKET ===
-  const speedBase2 = p.position === 'GK' ? 0.6
-                : p.position === 'DF' ? 0.9
-                : p.position === 'OS' ? 1.1
-                : 1.3;
-  let speedBase = speedBase2;
+      // === HAREKET (sprint hızları yükseltildi) ===
+  let speedBase = p.position === 'GK' ? 0.8
+                : p.position === 'DF' ? 1.4
+                : p.position === 'OS' ? 1.7
+                : 2.1; // FV en hızlı
+
   // Faz'a göre hız ayarı
   if (phase === 'counter' && (p.position === 'FV' || p.position === 'OS')) {
-    speedBase *= 1.4; // kontra hücumda hücum oyuncuları hızlı koşar
+    speedBase *= 1.6; // kontra hücumda tam sprint
   } else if (phase === 'building' && p.position === 'GK') {
-    speedBase *= 0.7; // build-up'ta kaleci organize
+    speedBase *= 0.7;
   }
-  const urgency = distToBall < 8 ? 2.2
-                : distToBall < 15 ? 1.7
-                : distToBall < 25 ? 1.2
-                : distToBall < 40 ? 0.9
-                : 0.6;
+  // Top bizdeyse ve oyuncu hücum oyuncusuysa → top almaya sprint
+  if (isMyBall && (p.position === 'FV' || p.position === 'OS') && distToBall > 15) {
+    speedBase *= 1.3;
+  }
+  // Top rakipteyse ve oyuncu orta saha/savunma → pres sprint
+  if (!isMyBall && distToBall < 20 && (p.position === 'OS' || p.position === 'DF')) {
+    speedBase *= 1.4;
+  }
+  // Top kendi yarısında ve oyuncu uzak → geri dönme acil
+  if (ballInOwnHalf && !isMyBall && (p.position === 'FV' || p.position === 'OS')) {
+    const ownGoalX = teamSide === 'home' ? 0 : 100;
+    const distToOwnGoal = Math.abs(px - ownGoalX);
+    if (distToOwnGoal > 30) speedBase *= 1.5; // geri dön sprint
+  }
+
+  const urgency = distToBall < 8 ? 2.8
+                : distToBall < 15 ? 2.2
+                : distToBall < 25 ? 1.6
+                : distToBall < 40 ? 1.1
+                : 0.8;
   const staminaFactor = (p.live.currentStamina || 100) < 30 ? 0.5 : 1.0;
   const speed = speedBase * urgency * staminaFactor;
 

@@ -178,20 +178,11 @@ function shouldCross(player, match) {
   return true;
 }
 
-// === KARAR 4: TUT / GERİ PAS MI? ===
-// Gerideyse, defansif taktikteyse veya baskı altındaysa
+// === KARAR 4: TUT MU? (sadece çok yorgunluk veya çok geride) ===
 function shouldHoldOrRecycle(player, match) {
-  const ball = match.ballPos;
-  const side = match.ballSide;
-  const x = side === 'home' ? ball.x : 100 - ball.x;
   const stamina = player.live?.currentStamina ?? 100;
-  const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
-
-  // Gerideyse (x < 30) ve defansif taktikteyse
-  if (x < 30 && tactic.holdBoost > 1.0) return true;
-  // Çok yorgunsa (stamina < 25) → tut
-  if (stamina < 25) return true;
-  // GK artık GK özel kararıyla handle ediliyor
+  // Çok yorgunsa (stamina < 20) → top sakla, kayıp riskini azalt
+  if (stamina < 20) return true;
   return false;
 }
 
@@ -279,12 +270,9 @@ export function decideAction(player, match) {
   // 3) PAS — sıkışmışsa ve arkadaşı iyi pozisyondaysa
   if (shouldPass(player, match)) return pickPassType(player, match);
 
-  // 4) TUT / GERİ PAS — gerideyse veya yorgunsa veya defansif taktikteyse
+  // 4) TUT / GERİ PAS — sadece çok geride + defansif taktik (sıkı)
   if (shouldHoldOrRecycle(player, match)) {
-    const ball = match.ballPos;
-    const x = match.ballSide === 'home' ? ball.x : 100 - ball.x;
-    if (x < 30) return 'recycle';
-    return 'hold';
+    return 'hold'; // recycle kaldırıldı — oyuncular sürüşü tercih eder
   }
 
   // 5) DEFAULT: DRIBLING (top sürmek) — oyuncular her zaman sürüşü tercih eder
