@@ -1138,3 +1138,68 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .lineup-actions { display: flex; gap: 6px; }
 .lineup-actions .btn { flex: 1; }
 #lineup-saved-info { font-size: 11px; margin-left: 8px; }
+
+/* === TAKTİK MODALINDA KÜÇÜK SAHA === */
+.lineup-mini-pitch {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  aspect-ratio: 7 / 10;
+  background:
+    linear-gradient(180deg,
+      #2d6a4f 0%, #2d6a4f 8%,
+      #40916c 8%, #40916c 92%,
+      #2d6a4f 92%, #2d6a4f 100%);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.lineup-mini-pitch::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px; background: rgba(255,255,255,0.3);
+  transform: translateX(-50%);
+}
+.lmp-slot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  z-index: 2;
+}
+.lmp-chip {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  background: var(--bg-1);
+  color: var(--text);
+  padding: 1px;
+}
+.lmp-chip.GK { border-color: #f59e0b; background: rgba(245,158,11,0.15); }
+.lmp-chip.DF { border-color: #3b82f6; background: rgba(59,130,246,0.15); }
+.lmp-chip.OS { border-color: #10b981; background: rgba(16,185,129,0.15); }
+.lmp-chip.FV { border-color: #ef4444; background: rgba(239,68,68,0.15); }
+.lmp-chip .lm-name {
+  font-size: 7px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 32px;
+  line-height: 1;
+}
+.lmp-chip .lm-pos {
+  font-size: 7px;
+  font-weight: 600;
+  opacity: 0.7;
+  line-height: 1;
+}

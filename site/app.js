@@ -1538,15 +1538,60 @@ let pendingFormation = '442';
 function showTacticsModal() {
   pendingTactics = { home: 'normal', away: 'normal' };
   pendingFormation = '442';
+  // Mevcut kayıtlı formasyonu yükle
+  const user = getUserTeam();
+  if (user?.formation) {
+    pendingFormation = user.formation;
+  }
   // Taktik state'i reset
   els.tacticsModal.querySelectorAll('.tactic-option').forEach(b => {
     b.classList.toggle('selected', b.dataset.tactic === 'normal');
   });
   els.tacticsModal.querySelectorAll('.formation-option').forEach(b => {
-    b.classList.toggle('selected', b.dataset.formation === '442');
+    b.classList.toggle('selected', b.dataset.formation === pendingFormation);
   });
+  // 11 kişilik lineup önizleme
+  renderLineupMini(pendingFormation);
   els.tacticsModal.style.display = 'flex';
   if (window.lucide) lucide.createIcons();
+}
+
+// === TAKTİK MODALINDA 11 KİŞİLİK LINEUP ÖNİZLEME ===
+function renderLineupMini(formation) {
+  const container = document.getElementById('lineup-mini-pitch');
+  if (!container) return;
+  const meta = document.getElementById('lineup-mini-meta');
+  container.innerHTML = '';
+  const user = getUserTeam();
+  if (!user) return;
+  const slots = TACTIC_FORMATIONS[formation] || TACTIC_FORMATIONS['442'];
+  const onField = user.players.filter(p => p.onField);
+  // onField'i slot pozisyonuna göre sırala: GK, DF, OS, FV
+  const posOrder = { GK: 1, DF: 2, OS: 3, FV: 4 };
+  const sorted = [...onField].sort((a, b) => (posOrder[a.position] || 5) - (posOrder[b.position] || 5));
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    const player = sorted[i];
+    const slotEl = document.createElement('div');
+    slotEl.className = 'lmp-slot';
+    slotEl.style.left = `${slot.x}%`;
+    slotEl.style.top = `${slot.y}%`;
+    if (player) {
+      const chip = document.createElement('div');
+      chip.className = `lmp-chip ${player.position}`;
+      const firstName = (player.name || '').split(' ').slice(0, 2).join(' ');
+      chip.innerHTML = `
+        <div class="lm-name">${firstName}</div>
+      `;
+      chip.title = `${player.name} (${player.position})`;
+      slotEl.appendChild(chip);
+    }
+    container.appendChild(slotEl);
+  }
+  if (meta) {
+    const filled = sorted.length;
+    meta.textContent = `${filled}/11 — ${formation}`;
+  }
 }
 
 function startUserMatch(skip = false) {
@@ -2289,6 +2334,8 @@ els.formationGrid?.addEventListener('click', (e) => {
   els.formationGrid.querySelectorAll('.formation-option').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   pendingFormation = btn.dataset.formation;
+  // Mini sahayı güncelle
+  renderLineupMini(pendingFormation);
 });
 els.btnStartMatchConfirm?.addEventListener('click', () => {
   els.tacticsModal.style.display = 'none';
