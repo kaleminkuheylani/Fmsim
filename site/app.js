@@ -1275,35 +1275,6 @@ function computePlayerRating(p) {
   return totalWeight > 0 ? weighted / totalWeight : 50;
 }
 
-function trainPlayer(pid) {
-  if (!game) return;
-  const user = getUserTeam();
-  if (!user) return;
-  const player = user.players.find(p => p.id === pid);
-  if (!player) return;
-  if (game.trainingPoints <= 0) { alert('Antrenman puanın kalmadı!'); return; }
-
-  const select = els.devList.querySelector(`.train-area[data-pid="${pid}"]`);
-  if (!select) return;
-  const attr = select.value;
-  if (!player.attrs) player.attrs = {};
-  const current = player.attrs[attr] || 50;
-  // Potansiyel sınırı YOK — sadece paraya bak
-  const cost = 50_000; // her antrenman 50K €
-
-  if (!player.personalMoney) player.personalMoney = 0;
-  if (player.personalMoney < cost) {
-    alert(`${player.name} kişisel bütçesi yetersiz! (${formatMoney(player.personalMoney)} / ${formatMoney(cost)})\n\nMaçlarda iyi oynayarak para kazanabilir.`);
-    return;
-  }
-
-  player.personalMoney -= cost;
-  player.attrs[attr] = Math.min(99, current + 2); // 99 sert sınır
-  game.trainingPoints--;
-  saveGame();
-  renderDevelopmentPage();
-}
-
 function showPlayerDetail(pid) {
   if (!game) return;
   const user = getUserTeam();
@@ -2113,14 +2084,8 @@ function applyWeeklyStatusChanges(currentWeek) {
 }
 
 // Geriye uyumluluk
-function recoverPlayers(currentWeek) {
-  applyWeeklyStatusChanges(currentWeek);
-}
-
-// === DOĞAL GELİŞİM (haftalık, yavaş, bedava) ===
-// === ANTRENMAN SİSTEMİ (TEK) ===
-// İki tip:
-// 1) Takım antrenmanı — haftada 1 yapılabilir, tüm oyunculara +X yetenek, sakatlık riski, maliyet
+// === ANTRENMAN SİSTEMİ ===
+// Takım antrenmanı (haftada 1, ücretsiz, +1.5 yetenek, %10 sakatlık riski) + Kişisel (50K €, +2 yetenek)
 // 2) Kişisel antrenman — oyuncu detay sayfasından tek tıkla, +2 yetenek, parayla
 // İkisinin de avantaj/dezavantajı var.
 
