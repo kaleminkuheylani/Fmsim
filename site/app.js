@@ -733,33 +733,41 @@ function renderDevelopmentPage() {
   const user = getUserTeam();
   if (!user) return;
 
-  // Antrenman puanı başlat (yoksa)
-  if (game.trainingPoints == null) game.trainingPoints = 5;
-  if (game.lastTrainingWeek == null) game.lastTrainingWeek = -1;
-  // Yeni hafta geldi mi? 5 puan yenile
-  if (game.lastTrainingWeek !== game.league.currentWeek) {
-    game.trainingPoints = 5;
-    game.lastTrainingWeek = game.league.currentWeek;
-  }
-
   els.devList.innerHTML = '';
 
-  // Üst başlık: antrenman puanı
-  const header = document.createElement('div');
-  header.className = 'training-header';
-  const lastWeek = game.lastTrainingWeek;
-  const isCurrentWeek = lastWeek === game.league.currentWeek;
-  header.innerHTML = `
-    <div class="th-info">
-      <div class="th-points">
-        <i data-lucide="zap"></i>
-        <strong>${game.trainingPoints}</strong> / 5
-        <span class="muted">Antrenman Puanı (Hafta ${game.league.currentWeek + 1})</span>
+  // === TAKIM ANTRENMANI KARTI ===
+  const teamAlreadyDone = game.lastTeamTrainWeek === game.league.currentWeek;
+  const teamCard = document.createElement('div');
+  teamCard.className = 'card training-team-card';
+  teamCard.innerHTML = `
+    <div class="card-header">
+      <i data-lucide="users"></i>
+      <h3>Takım Antrenmanı</h3>
+    </div>
+    <div class="team-train-body">
+      <div class="team-train-stats">
+        <div class="muted">Tesislerde yapılır · <strong>ÜCRETSİZ</strong></div>
+        <div class="muted">Avantaj: Tüm sahadaki oyunculara <strong class="ok">+1.5 yetenek</strong></div>
+        <div class="muted">Dezavantaj: <strong class="bad">%10 sakatlık riski</strong> (1-2 hafta)</div>
+        <div class="muted">Limit: <strong>haftada 1 kez</strong></div>
       </div>
-      <div class="th-hint muted">Her oyuncu için +1 puan verebilirsin. Puan haftada yenilenir.</div>
+      <button class="btn primary" id="btn-team-train" ${teamAlreadyDone ? 'disabled' : ''}>
+        <i data-lucide="zap"></i> ${teamAlreadyDone ? 'Bu Hafta Yapıldı' : 'Takım Antrenmanı Yap'}
+      </button>
     </div>
   `;
-  els.devList.appendChild(header);
+  els.devList.appendChild(teamCard);
+
+  // Kişisel antrenman açıklaması
+  const info = document.createElement('div');
+  info.className = 'training-info';
+  info.innerHTML = `
+    <div class="ti-block">
+      <strong>Kişisel Antrenman</strong> — listede her oyuncu için <em>Profil</em> tıkla, ardından <em>Antrenman</em> ile tek oyuncuya +2 yetenek.
+      <br>Avantaj: hızlı, tek oyuncu. <strong>50K € kişisel bütçeden</strong>. Dezavantaj: yorgunluk (-15 stamina).
+    </div>
+  `;
+  els.devList.appendChild(info);
 
   // Pozisyon → antrenman alanları
   const trainingAreas = {
@@ -785,7 +793,9 @@ function renderDevelopmentPage() {
     const pct = Math.min(100, (rating / potential) * 100);
     const ageCategory = p.age < 23 ? '🟢' : p.age < 28 ? '🔵' : p.age < 32 ? '🟡' : '🔴';
     const areas = trainingAreas[p.position] || ['passing'];
-    const currentBest = areas.reduce((a, b) => (p.attrs?.[a] || 0) > (p.attrs?.[b] || 0) ? a : b);
+    const best = areas.map(a => ({ a, v: p.attrs?.[a] || 0 })).sort((x, y) => y.v - x.v)[0].a;
+    const personalMoney = p.personalMoney || 0;
+    const injured = p.live?.injured ? '<div class="dev-bad">🏥 SAKAT</div>' : '';
 
     const item = document.createElement('div');
     item.className = 'dev-item';
@@ -800,27 +810,32 @@ function renderDevelopmentPage() {
         <div class="dr-max">/ ${potential}</div>
       </div>
       <div class="dev-train">
-        <select class="train-area" data-pid="${p.id}">
-          ${areas.map(a => `<option value="${a}" ${a === currentBest ? 'selected' : ''}>${areaLabels[a] || a}</option>`).join('')}
-        </select>
-        <button class="train-btn" data-pid="${p.id}" ${game.trainingPoints <= 0 ? 'disabled' : ''}>
-          <i data-lucide="plus"></i> Antren
+        <div class="dev-money">💰 ${formatMoney(personalMoney)}</div>
+        <button class="btn primary dev-profile" data-pid="${p.id}">
+          <i data-lucide="user"></i> Profil
         </button>
-      </div>
-      <div class="dev-meta">
-        <div class="d-meta">${p.age}y · ${p.position}</div>
-        <button class="dev-detail" data-pid="${p.id}"><i data-lucide="info"></i> Detay</button>
+        ${injured}
       </div>
     `;
     els.devList.appendChild(item);
   }
 
   // Event listener'lar
-  els.devList.querySelectorAll('.train-btn').forEach(btn => {
-    btn.addEventListener('click', () => trainPlayer(btn.dataset.pid));
+  els.devList.querySelectorAll('.dev-profile').forEach(btn => {
+    btn.addEventListener('click', () => openPlayerPage(btn.dataset.pid));
   });
-  els.devList.querySelectorAll('.dev-detail').forEach(btn => {
-    btn.addEventListener('click', () => showPlayerDetail(btn.dataset.pid));
+  document.getElementById('btn-team-train')?.addEventListener('click', () => {
+    const result = applyTeamTraining();
+    if (result.ok) {
+      let msg = `✅ Takım antrenmanı tamamlandı!\n\nTüm sahadaki oyuncular +${TEAM_TRAIN_BONUS} yetenek kazandı.`;
+      if (result.injured) {
+        msg += `\n\n⚠️ ${result.injured.name} sakatlandı (${injured.live?.injuryWeeks} hafta).`;
+      }
+      alert(msg);
+      renderDevelopmentPage();
+    } else {
+      alert('❌ ' + result.msg);
+    }
   });
   if (window.lucide) lucide.createIcons();
 }
@@ -1107,9 +1122,6 @@ function playWeek(skip = false) {
 
   // Tüm takımlar: sakatlık iyileşmesi + ceza sıfırlama + yeni sakatlık üret
   applyWeeklyStatusChanges(next);
-
-  // Doğal gelişim: yavaş, bedava, yaşa göre (tüm takımlar)
-  applyNaturalDevelopment(next);
 
   // CPU teklifleri üret
   generateOffers(next);
@@ -1432,35 +1444,86 @@ function recoverPlayers(currentWeek) {
 }
 
 // === DOĞAL GELİŞİM (haftalık, yavaş, bedava) ===
-// Oyuncular yaşlarına göre yavaş yavaş gelişir. Mevcut yetenekleri koruyarak
-// potansiyellerine doğru tırmanır. Antrenman (manuel) ile çakışmaz, eklenir.
-// İki mantık birleşir: haftalık otomatik (bedava, yavaş) + antrenman (pahalı, hızlı).
-function applyNaturalDevelopment(currentWeek) {
-  if (!game?.league?.teams) return;
-  for (const team of game.league.teams) {
-    for (const p of team.players) {
-      if (!p.attrs || p.live?.injured) continue; // sakatken gelişmez
-      const age = p.age || 25;
-      const potential = p.potential || 80;
-      // Yaşa göre haftalık delta: gençler hızlı, yaşlılar düşer
-      let weeklyDelta = 0;
-      if (age <= 19) weeklyDelta = 0.4;
-      else if (age <= 22) weeklyDelta = 0.3;
-      else if (age <= 26) weeklyDelta = 0.2;
-      else if (age <= 29) weeklyDelta = 0.05;
-      else if (age <= 32) weeklyDelta = -0.1;
-      else weeklyDelta = -0.2;
-      // Rastgele küçük varyans
-      weeklyDelta += (Math.random() - 0.5) * 0.1;
-      // Pozisyon ağırlığı: anahtar alanlar daha hızlı gelişir
-      for (const key in p.attrs) {
-        const current = p.attrs[key];
-        let delta = weeklyDelta;
-        if (current >= potential) delta = Math.min(delta, 0); // potansiyel aşılamaz (otomatik)
-        p.attrs[key] = Math.max(20, Math.min(99, current + delta));
-      }
+// === ANTRENMAN SİSTEMİ (TEK) ===
+// İki tip:
+// 1) Takım antrenmanı — haftada 1 yapılabilir, tüm oyunculara +X yetenek, sakatlık riski, maliyet
+// 2) Kişisel antrenman — oyuncu detay sayfasından tek tıkla, +2 yetenek, parayla
+// İkisinin de avantaj/dezavantajı var.
+
+// === TAKIM ANTRENMANI ===
+// Her hafta menajer "Takım antrenmanı" yapabilir. Tüm sahadaki oyunculara
+// +1.5 yetenek, ama %10 ihtimalle 1 oyuncu sakatlanır (1-2 hafta).
+// Parasız — gerçek kulüpler antrenmanı kendi tesislerinde yapar.
+const TEAM_TRAIN_BONUS = 1.5;
+const TEAM_TRAIN_INJURY_CHANCE = 0.10;
+
+function applyTeamTraining() {
+  if (!game) return { ok: false, msg: 'Oyun başlamamış' };
+  const user = getUserTeam();
+  if (!user) return { ok: false, msg: 'Takım yok' };
+  if (game.lastTeamTrainWeek === game.league.currentWeek) {
+    return { ok: false, msg: 'Bu hafta zaten takım antrenmanı yaptın' };
+  }
+  // Tüm sahadaki oyunculara bonus
+  const lineup = user.players.filter(p => p.onField);
+  for (const p of lineup) {
+    if (!p.attrs) continue;
+    for (const key in p.attrs) {
+      p.attrs[key] = Math.min(99, p.attrs[key] + TEAM_TRAIN_BONUS);
     }
   }
+  // Sakatlık riski: %10 ihtimalle 1 oyuncu sakatlanır
+  let injured = null;
+  if (Math.random() < TEAM_TRAIN_INJURY_CHANCE && lineup.length > 0) {
+    injured = lineup[Math.floor(Math.random() * lineup.length)];
+    injured.live = injured.live || {};
+    const weeks = 1 + Math.floor(Math.random() * 2);
+    injured.live.injured = true;
+    injured.live.injuryWeeks = weeks;
+    injured.live.injuryReturn = game.league.currentWeek + weeks;
+    injured.live.yellowCount = 0;
+  }
+  game.lastTeamTrainWeek = game.league.currentWeek;
+  saveGame();
+  return { ok: true, msg: 'Takım antrenmanı tamamlandı', injured };
+}
+
+// === KİŞİSEL ANTRENMAN ===
+// Oyuncu detay sayfasında. +2 yetenek seçilen alanda, maliyet 50K €.
+// Avantaj: hızlı, tek oyuncu. Dezavantaj: pahalı, yorgunluk.
+const PERSONAL_TRAIN_COST = 50_000;
+const PERSONAL_TRAIN_BONUS = 2;
+
+function applyPersonalTraining(pid, attr) {
+  if (!game) return { ok: false, msg: 'Oyun yok' };
+  const user = getUserTeam();
+  const player = user?.players.find(p => p.id === pid);
+  if (!player) return { ok: false, msg: 'Oyuncu yok' };
+  if (!user.budget) return { ok: false, msg: 'Bütçe yok' };
+  if (user.budget.budget < PERSONAL_TRAIN_COST) {
+    return { ok: false, msg: `Yetersiz bütçe!` };
+  }
+  if (player.personalMoney === undefined) player.personalMoney = 100_000;
+  if (player.personalMoney < PERSONAL_TRAIN_COST) {
+    return { ok: false, msg: `Yetersiz kişisel bütçe! (${formatMoney(player.personalMoney)} / ${formatMoney(PERSONAL_TRAIN_COST)})` };
+  }
+  if (player.live?.injured) {
+    return { ok: false, msg: 'Oyuncu sakat, antrenman yapamaz' };
+  }
+  if (!player.attrs) player.attrs = {};
+  const current = player.attrs[attr] || 50;
+  if (current >= 99) {
+    return { ok: false, msg: 'Oyuncu zaten 99! (sınır)' };
+  }
+  user.budget.budget -= PERSONAL_TRAIN_COST;
+  player.personalMoney -= PERSONAL_TRAIN_COST;
+  player.attrs[attr] = Math.min(99, current + PERSONAL_TRAIN_BONUS);
+  // Yorgunluk: canlı stamina düşür
+  if (player.live) {
+    player.live.currentStamina = Math.max(0, (player.live.currentStamina || 100) - 15);
+  }
+  saveGame();
+  return { ok: true, msg: `${attr} +${PERSONAL_TRAIN_BONUS}!` };
 }
 
 // Skip: tüm maçı 5 saniyede bitir
