@@ -14,6 +14,7 @@ import {
   resetClubPool,
   ATTRS,
   ROLE_WEIGHTS,
+  updatePositions,
 } from './js/match-engine.js';
 
 if (window.lucide) lucide.createIcons();
@@ -1441,7 +1442,8 @@ function updatePitchBall() {
 let animFrameId = null;
 function startPitchAnimation() {
   if (animFrameId) return;
-  const tickAnim = () => {
+  let lastUpdate = 0;
+  const tickAnim = (now) => {
     if (!match || match.minute >= 90) {
       animFrameId = null;
       return;
@@ -1450,6 +1452,13 @@ function startPitchAnimation() {
     if (!els.matchPitch || els.matchPitch.offsetParent === null) {
       animFrameId = null;
       return;
+    }
+    // Her 60ms'de bir updatePositions çağır (yumuşak hareket için)
+    if (now - lastUpdate > 60) {
+      try {
+        updatePositions(match);
+      } catch (e) { /* yoksay */ }
+      lastUpdate = now;
     }
     // Görsel pozisyonları interpolate et (smooth)
     animatePitchVisual();
@@ -1468,9 +1477,11 @@ function stopPitchAnimation() {
 // Her frame: mevcut görsel pozisyonları hedef pozisyonlara doğru interpole et
 const visualState = new Map(); // pid -> { x, y }
 const ballVisual = { x: 50, y: 35 };
+let visualFrame = 0;
 function animatePitchVisual() {
   if (!els.mpPlayers || !match) return;
-  const smooth = 0.18; // her frame %18 hedefe yaklaş
+  visualFrame++;
+  const smooth = 0.20; // her frame %20 hedefe yaklaş
   // Oyuncular
   for (const side of ['home', 'away']) {
     const team = match[side];
@@ -1480,13 +1491,19 @@ function animatePitchVisual() {
       if (!dot) continue;
       const targetX = (side === 'away' ? 100 - p.live.x : p.live.x);
       const targetY = p.live.y;
+      // Yürüyüş efekti: topa yakın değilse rastgele küçük salınım
+      const ball = match.ballPos || { x: 50, y: 35 };
+      const distToBall = Math.hypot((side === 'away' ? 100 - p.live.x : p.live.x) - ball.x, p.live.y - ball.y);
+      const wander = distToBall > 25 ? Math.sin(visualFrame * 0.04 + p.id.charCodeAt(0)) * 0.3 : 0;
+      const targetXW = targetX + wander;
+      const targetYW = targetY + (distToBall > 25 ? Math.cos(visualFrame * 0.04 + p.id.charCodeAt(0)) * 0.3 : 0);
       let v = visualState.get(p.id);
       if (!v) {
-        v = { x: targetX, y: targetY };
+        v = { x: targetXW, y: targetYW };
         visualState.set(p.id, v);
       } else {
-        v.x += (targetX - v.x) * smooth;
-        v.y += (targetY - v.y) * smooth;
+        v.x += (targetXW - v.x) * smooth;
+        v.y += (targetYW - v.y) * smooth;
       }
       dot.style.left = `${v.x}%`;
       dot.style.top = `${v.y}%`;

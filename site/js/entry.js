@@ -33,3 +33,6 @@ export {
 
 // Player schema — ATTRS, ROLE_WEIGHTS, STAR_TRAITS
 export { ATTRS, ROLE_WEIGHTS, STAR_TRAITS } from '../../game/playerSchema.js';
+
+// Pozisyon güncelleme (animasyon için)
+export { updatePositions } from '../../match/positions.js';

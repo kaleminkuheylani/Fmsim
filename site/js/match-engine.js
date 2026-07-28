@@ -4291,5 +4291,6 @@ export {
   simulateMinute,
   startMatch,
   threatOf,
+  updatePositions,
   zoneOf
 };
