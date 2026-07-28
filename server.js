@@ -124,6 +124,10 @@ function snapshot(match) {
     finished: match.minute >= 90,
     eventCount: match.events.length,
     narrativeCount: (match.narrativeLog || []).length,
+    // === ORGANİZE HÜCUM BİLGİSİ ===
+    phase: match.phase ? { ...match.phase } : { home: 'attacking', away: 'defending' },
+    phaseCounter: match.phaseCounter ? { ...match.phaseCounter } : { home: 0, away: 0 },
+    passChain: match.passChain ? { ...match.passChain } : { home: 0, away: 0 },
   };
 }
 

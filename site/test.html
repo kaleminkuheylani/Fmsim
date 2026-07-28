@@ -31,6 +31,12 @@
 
   /* === STATS GRID === */
   .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .phase-pill { padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 11px; background: #1f2937; color: #94a3b8; border: 1px solid #334155; }
+  .phase-pill.phase-attacking { background: #1e3a8a; color: #bfdbfe; border-color: #3b82f6; }
+  .phase-pill.phase-defending { background: #4c1d1d; color: #fecaca; border-color: #b91c1c; }
+  .phase-pill.phase-counter { background: #78350f; color: #fde68a; border-color: #f59e0b; animation: counter-glow 1s infinite; }
+  .phase-pill.phase-building { background: #134e4a; color: #99f6e4; border-color: #14b8a6; }
+  @keyframes counter-glow { 50% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.5); } }
   .stat-card { background: #0a0e1a; border-radius: 6px; padding: 10px; text-align: center; }
   .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
   .stat-value { font-size: 18px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
@@ -353,6 +359,16 @@
         <div class="stat-label">Momentum</div>
         <div class="stat-value"><span id="s-momentum">50</span>% ev lehine</div>
       </div>
+      <div class="stat-card" id="phase-card">
+        <div class="stat-label">Organize Hücum</div>
+        <div class="stat-value" style="font-size:14px;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div class="phase-pill" id="phase-home">—</div>
+            <div class="phase-pill" id="phase-away">—</div>
+          </div>
+          <div style="margin-top:6px;font-size:11px;opacity:0.7;">Pas zinciri: <span id="s-chain-h">0</span> – <span id="s-chain-a">0</span></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -601,6 +617,31 @@
     $('s-red-a').textContent = m.away.red;
     $('s-momentum').textContent = m.momentum;
 
+    // Organize hücum faz göstergesi
+    const phaseHome = m.phase?.home || 'attacking';
+    const phaseAway = m.phase?.away || 'defending';
+    const phaseLabels = {
+      attacking: 'Hücum',
+      defending: 'Savunma',
+      counter: 'Kontra',
+      building: 'Build-up',
+      normal: 'Normal',
+    };
+    const phEl = $('phase-home');
+    const paEl = $('phase-away');
+    if (phEl) {
+      phEl.textContent = phaseLabels[phaseHome] || phaseHome;
+      phEl.className = 'phase-pill phase-' + phaseHome;
+    }
+    if (paEl) {
+      paEl.textContent = phaseLabels[phaseAway] || phaseAway;
+      paEl.className = 'phase-pill phase-' + phaseAway;
+    }
+    if (m.passChain) {
+      $('s-chain-h').textContent = m.passChain.home;
+      $('s-chain-a').textContent = m.passChain.away;
+    }
+
     // ball
     const ball = m.ball;
     const ballEl = $('lp-ball');
@@ -781,6 +822,12 @@
     $('s-poss-h-bar').style.width = '50%';
     $('s-poss-a-bar').style.width = '50%';
     $('s-momentum').textContent = '50';
+    $('phase-home').textContent = '—';
+    $('phase-home').className = 'phase-pill';
+    $('phase-away').textContent = '—';
+    $('phase-away').className = 'phase-pill';
+    $('s-chain-h').textContent = '0';
+    $('s-chain-a').textContent = '0';
     // Pitch'i temizle
     $('lp-players').innerHTML = '';
     $('lp-effects').innerHTML = '';

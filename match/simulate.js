@@ -40,6 +40,14 @@ export function startMatch(match) {
     };
     match.substitution = createSubstitution(match, options);
   }
+  // === TAKIM FAZI (organize hücum için) ===
+  // Her takım için: 'defending' | 'attacking' | 'counter' | 'building'
+  // 'counter' = top kazandık, hızlı hücum (4-6 tick)
+  // 'building' = kale vuruşu / set-piece sonrası organize çıkış (2-3 tick)
+  match.phase = { home: 'attacking', away: 'defending' };
+  match.phaseCounter = { home: 0, away: 0 };
+  // Pas zinciri sayacı (ardışık pas → kontra atak narratifi)
+  match.passChain = { home: 0, away: 0 };
   match.events.push({
     minute: 0,
     type: 'kickoff',
@@ -78,6 +86,20 @@ export function simulateMinute(match) {
       if (p.onField) tickStamina(p, match.minute);
     }
   }
+
+  // === FAZ SAYACI AZALTMA ===
+  if (!match.phase) match.phase = { home: 'defending', away: 'defending' };
+  if (!match.phaseCounter) match.phaseCounter = { home: 0, away: 0 };
+  for (const side of ['home', 'away']) {
+    if (match.phaseCounter[side] > 0) {
+      match.phaseCounter[side]--;
+      if (match.phaseCounter[side] === 0) {
+        // Faz süresi doldu — top bizdeyse attacking, değilse defending
+        match.phase[side] = (side === match.ballSide) ? 'attacking' : 'defending';
+      }
+    }
+  }
+
   updatePositions(match);
 
   // === MOTIVATION ENGINE ===
@@ -194,11 +216,27 @@ function simulateAction(match) {
     }
     // Tüm oyuncuları kendi formasyon pozisyonlarına snap'le
     resetToFormation(match);
+    // === BUILD-UP fazı: kale vuruşu / set-piece sonrası organize çıkış ===
+    // Yeni taşıyıcı = kaleci veya yan çizgideki oyuncu, organize pas zinciri
+    if (result.newCarrier) {
+      const builderSide = result.newCarrier.side;
+      const builderType = result.events?.[0]?.type;
+      // Kale vuruşu, taç, korner sonrası 2-3 tick "building" fazı
+      if (['goal_kick', 'throw_in', 'corner'].includes(builderType)) {
+        match.phase[builderSide] = 'building';
+        match.phaseCounter[builderSide] = 3;
+        match.passChain[builderSide] = 0;
+      } else if (builderType === 'out_of_play') {
+        // Genel out → pas zincirini sıfırla
+        match.passChain[builderSide] = 0;
+      }
+    }
     // Set-piece sonrası: taşıyıcı zaten yeni pozisyonda, diğer oyuncular formasyonda
     return;
   }
 
   // State'i güncelle
+  const prevBallSide = match.ballSide;
   if (result.newBall) match.ballPos = result.newBall;
   if (result.newCarrier) {
     match.ballCarrier = result.newCarrier;
@@ -208,6 +246,19 @@ function simulateAction(match) {
     }
   } else {
     match.ballCarrier = null;
+  }
+
+  // === FAZ GEÇİŞLERİ (top el değiştirdi mi?) ===
+  const newBallSide = match.ballSide;
+  if (prevBallSide !== newBallSide && newBallSide) {
+    // Top el değişti! Kazanan takım "counter" fazına girer (4-5 tick hızlı hücum)
+    match.phase[newBallSide] = 'counter';
+    match.phaseCounter[newBallSide] = 5;
+    match.passChain[newBallSide] = 1;
+    // Kaybeden takım savunma fazına geç
+    match.phase[prevBallSide] = 'defending';
+    match.phaseCounter[prevBallSide] = 0;
+    match.passChain[prevBallSide] = 0;
   }
   if (result.events) {
     match.events.push(...result.events);

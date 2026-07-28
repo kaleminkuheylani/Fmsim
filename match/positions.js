@@ -268,18 +268,39 @@ export function updatePositions(match) {
         }
       }
 
+      // === FAZ-AWARE HEDEF OFFSET (organize hücum için) ===
+      const phase = match.phase?.[teamSide] || (isMyBall ? 'attacking' : 'defending');
+      if (phase === 'counter' && isMyBall) {
+        // Kontra hücum: hücum oyuncuları 8-12m daha ileri, savunma geride kalır
+        if (p.position === 'FV' || p.position === 'OS') {
+          targetX += teamForward * 8;
+        }
+      } else if (phase === 'building' && isMyBall) {
+        // Build-up: kaleci/DF organize çıkış, 3-4m öne, hücum yüksek
+        if (p.position === 'DF') targetX += teamForward * 3;
+        if (p.position === 'GK') targetX += teamForward * 2;
+        if (p.position === 'FV') targetX += teamForward * 4; // forvet yüksekte bekler
+      }
+
       // === HAREKET ===
-      const speedBase = p.position === 'GK' ? 0.6
-                      : p.position === 'DF' ? 0.9
-                      : p.position === 'OS' ? 1.1
-                      : 1.3;
-      const urgency = distToBall < 8 ? 2.2
-                    : distToBall < 15 ? 1.7
-                    : distToBall < 25 ? 1.2
-                    : distToBall < 40 ? 0.9
-                    : 0.6;
-      const staminaFactor = (p.live.currentStamina || 100) < 30 ? 0.5 : 1.0;
-      const speed = speedBase * urgency * staminaFactor;
+  const speedBase2 = p.position === 'GK' ? 0.6
+                : p.position === 'DF' ? 0.9
+                : p.position === 'OS' ? 1.1
+                : 1.3;
+  let speedBase = speedBase2;
+  // Faz'a göre hız ayarı
+  if (phase === 'counter' && (p.position === 'FV' || p.position === 'OS')) {
+    speedBase *= 1.4; // kontra hücumda hücum oyuncuları hızlı koşar
+  } else if (phase === 'building' && p.position === 'GK') {
+    speedBase *= 0.7; // build-up'ta kaleci organize
+  }
+  const urgency = distToBall < 8 ? 2.2
+                : distToBall < 15 ? 1.7
+                : distToBall < 25 ? 1.2
+                : distToBall < 40 ? 0.9
+                : 0.6;
+  const staminaFactor = (p.live.currentStamina || 100) < 30 ? 0.5 : 1.0;
+  const speed = speedBase * urgency * staminaFactor;
 
       // Sahadan taşmayı engelle (x: 0-100, y: 0-70)
       targetX = Math.max(2, Math.min(98, targetX));
