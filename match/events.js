@@ -44,21 +44,21 @@ function resolvePass(match, carrier, type, target) {
   const targetPlayer = findPlayer(match, target.side, target.playerId);
   if (!targetPlayer) return fail(match, 'pasHedefiYok');
 
-  // Pas zorluğu: mesafe + rakip baskısı
+  // Pas zorluğu: mesafe + rakip baskısı (daha düşük — gerçekçi futbolda pas isabeti yüksek)
   const distance = target.distance;
-  let difficulty = 50;
+  let difficulty = 35;
   if (type === 'short') {
-    difficulty = 40 + distance * 0.5;
+    difficulty = 28 + distance * 0.4;
   } else {
-    difficulty = 55 + distance * 0.8;
+    difficulty = 40 + distance * 0.6;
   }
-  // Rakip oyuncular araya girebilir
+  // Rakip oyuncular araya girebilir (daha az etki)
   const opp = side === 'home' ? match.away : match.home;
   const interceptors = opp.players.filter(p =>
     p.onField && p.position !== 'GK' &&
-    Math.hypot(p.live.x - match.ballPos.x, p.live.y - match.ballPos.y) < 18
+    Math.hypot(p.live.x - match.ballPos.x, p.live.y - match.ballPos.y) < 14
   );
-  difficulty += interceptors.length * 3;
+  difficulty += interceptors.length * 2;
 
   // Asinalık bonusu: yüksek uyum → pas isabeti artar (difficulty azalır)
   const affinityBonus = getAffinityBonus(carrier, targetPlayer);
@@ -136,19 +136,43 @@ function resolveCross(match, carrier) {
     return resolveShoot(match, carrier);
   }
 
-  const crossCheck = skillCheck(carrier, 'crossing', 55, { action: 'crossing', inBox: false });
+  const crossCheck = skillCheck(carrier, 'crossing', 40, { action: 'crossing', inBox: false });
   if (!crossCheck.success) {
     // Orta başarısız → kaleci veya savunma alır
     return outOfPlay(match, 'orta_kisa', 'away', { actor: carrier.id });
   }
 
-  // Hedef: ceza sahası içi bir oyuncu
+  // Hedef: ceza sahası içindeki FV veya OS (herhangi biri)
   const atk = match[side];
   const targets = atk.players.filter(p =>
-    p.onField && p.position === 'FV' &&
+    p.onField && (p.position === 'FV' || p.position === 'OS') &&
     (side === 'home' ? inHomeBox(p.live.x, p.live.y) : inAwayBox(p.live.x, p.live.y))
   );
-  if (!targets.length) return outOfPlay(match, 'orta_alici_yok', 'away');
+  if (!targets.length) {
+    // Hedef yoksa: bazen orta at, bazen pas tercih et (mekanik olmasın)
+    if (Math.random() < 0.5) {
+      const fallback = atk.players
+        .filter(p => p.onField && (p.position === 'FV' || p.position === 'OS'))
+        .map(p => ({ p, d: Math.hypot(p.live.x - match.ballPos.x, p.live.y - match.ballPos.y) }))
+        .sort((a, b) => a.d - b.d)[0];
+      if (fallback) {
+        return {
+          ok: true,
+          events: [{
+            minute: match.minute,
+            type: 'cross_success',
+            side,
+            actor: carrier.id,
+            target: fallback.p.id,
+            text: `${match.minute}' ${carrier.name} ortasını ${fallback.p.name}'e gönderdi.`,
+          }],
+          newBall: { x: fallback.p.live.x, y: fallback.p.live.y },
+          newCarrier: { side, playerId: fallback.p.id },
+        };
+      }
+    }
+    return outOfPlay(match, 'orta_alici_yok', 'away');
+  }
 
   const target = targets.sort((a, b) => getEffective(b, 'heading') - getEffective(a, 'heading'))[0];
   const newBall = { x: target.live.x, y: target.live.y };
@@ -280,12 +304,15 @@ function resolveDribble(match, carrier) {
 
   if (!nearest || nearest.d > 10) {
     // Kimse yakın değil — serbest ilerle
-    // (outOfPlay kaldırıldı: taç kaskadı yaratıyordu)
+    // inwardY sadece sınıra yakınsa (y < 10 veya y > 60) — kaskad önleme
+    // orta sahada top kanatta kalsın (cross olabilsin)
+    let inwardY = 0;
+    if (match.ballPos.y < 10) inwardY = 6;
+    else if (match.ballPos.y > 60) inwardY = -6;
     const dirX = side === 'home' ? 15 : -15;
-    const inwardY = match.ballPos.y < 35 ? 6 : -6;
     const newBall = {
       x: Math.max(0, Math.min(100, match.ballPos.x + dirX)),
-      y: Math.max(10, Math.min(60, match.ballPos.y + inwardY + (Math.random() - 0.5) * 3)),
+      y: Math.max(8, Math.min(62, match.ballPos.y + inwardY + (Math.random() - 0.5) * 2)),
     };
     return {
       ok: true,
