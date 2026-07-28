@@ -51,40 +51,44 @@ export function decisionWeights(player, match) {
   }
 
   // 2) KISA PAS
-  let passShort = 0.4; // her yerde makul
-  if (inBox) passShort = 0.15; // kutuda az tercih, şut kazansın
-  if (x < 30) passShort = 0.6; // geride güvenli oyun
+  let passShort = 0.30; // biraz azaltıldı — eskiden 0.4, dribling lehine
+  if (inBox) passShort = 0.10; // kutuda az tercih, şut kazansın
+  if (x < 30) passShort = 0.55; // geride güvenli oyun
   const passing = getEffective(player, 'passing');
   const vision = getEffective(player, 'vision');
   const decisions = getEffective(player, 'decisions');
   passShort *= 0.5 + (passing * 0.6 + vision * 0.3 + decisions * 0.1) / 100;
 
   // 3) UZUN PAS
-  let passLong = 0.2;
-  if (x > 50 && !inBox) passLong = 0.4; // orta sahadan ileri
-  if (x < 25) passLong = 0.5; // geriden başlat
+  let passLong = 0.15;
+  if (x > 50 && !inBox) passLong = 0.30; // orta sahadan ileri
+  if (x < 25) passLong = 0.40; // geriden başlat
   const firstTouch = getEffective(player, 'firstTouch');
   passLong *= 0.4 + (passing * 0.4 + vision * 0.4 + firstTouch * 0.2) / 100;
 
   // 4) ORTA
   let cross = 0;
-  if (x > 50 && ball.y < 25) cross = 0.55; // sol kanat
-  if (x > 50 && ball.y > 45) cross = 0.55; // sağ kanat
-  if (inBox) cross = 0.15;
-  if (x < 50) cross = 0.1;
+  if (x > 50 && ball.y < 25) cross = 0.45; // sol kanat
+  if (x > 50 && ball.y > 45) cross = 0.45; // sağ kanat
+  if (inBox) cross = 0.10;
+  if (x < 50) cross = 0.08;
   const crossing = getEffective(player, 'crossing');
   const fl = getEffective(player, 'flair');
   cross *= 0.5 + (crossing * 0.7 + fl * 0.3) / 100;
 
-  // 5) DriPLING
-  let dribble = 0.25;
-  if (x > 30 && x < 70) dribble = 0.45; // orta sahada hareketli — bu yaratıcı oyuncular için kritik
-  if (inBox) dribble = 0.20;
-  if (x < 25) dribble = 0.10; // geride fazla dripling riskli
+  // 5) DRIPLING — önemli ölçüde artırıldı
+  let dribble = 0.50; // base 0.25'ten 0.50'ye
+  if (x > 25 && x < 75 && !inBox) dribble = 0.85; // orta sahada çok aktif
+  if (inBox) dribble = 0.45; // kutuda da deneyebilir
+  if (x < 20) dribble = 0.20; // geride riskli
+  // Pozisyon bazlı bonus
+  if (player.position === 'FV' && x > 40) dribble += 0.30; // forvetler bireysel başlatır
+  if (player.position === 'OS' && x > 30 && x < 70) dribble += 0.20; // orta saha yaratıcı
   const dribbling = getEffective(player, 'dribbling');
   const agility = getEffective(player, 'agility');
   const pace = getEffective(player, 'pace');
-  dribble *= 0.5 + (dribbling * 0.4 + agility * 0.3 + pace * 0.3) / 100;
+  const fl2 = getEffective(player, 'flair');
+  dribble *= 0.5 + (dribbling * 0.4 + agility * 0.25 + pace * 0.2 + fl2 * 0.15) / 100;
 
   // 6) TOP TUT (hold)
   let hold = 0.1;

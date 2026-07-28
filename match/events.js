@@ -394,19 +394,65 @@ function corner(match, attackingSide) {
 }
 
 function outOfPlay(match, reason, newSide, extra = {}) {
+  const ballY = match.ballPos.y;
+  const ballX = match.ballPos.x;
+
+  // Top nereye gitti?
+  // - Yan çizgi (y < 8 veya y > 62): TAÇ (rakip takım atar)
+  // - Kale çizgisi (x < 3 veya x > 97): KALE VURUŞU (kaleci alır)
+  // - Geri kalan: genel out (orta saha, kaleci tutuşu vs.)
+  const isTouchline = ballY < 8 || ballY > 62;
+  const isGoalLine = ballX < 3 || ballX > 97;
+
+  let eventType, eventText, newBall, newCarrier;
+
+  if (isTouchline) {
+    // === TAÇ ===
+    // newSide = atan taraf (topa son dokunan oyuncunun RAKİBİ)
+    // Top yan çizgiye yakın bir noktada, en yakın oyuncuya
+    const throwY = ballY < 35 ? 4 : 66;
+    const throwX = Math.max(8, Math.min(92, ballX));
+    const team = match[newSide];
+    const nearest = team.players
+      .filter(p => p.onField)
+      .map(p => ({ p, d: Math.hypot(p.live.x - throwX, p.live.y - throwY) }))
+      .sort((a, b) => a.d - b.d)[0];
+    newBall = { x: throwX, y: throwY };
+    newCarrier = nearest ? { side: newSide, playerId: nearest.p.id } : null;
+    eventType = 'throw_in';
+    eventText = `${match.minute}' Taç! ${match[newSide].name}`;
+  } else if (isGoalLine) {
+    // === KALE VURUŞU ===
+    // newSide = kale vuruşunu kullanacak takım (savunan)
+    const gkX = newSide === 'home' ? 8 : 92;
+    const gk = match[newSide].players.find(p => p.onField && p.position === 'GK');
+    newBall = { x: gkX, y: 35 };
+    newCarrier = gk ? { side: newSide, playerId: gk.id } : null;
+    eventType = 'goal_kick';
+    eventText = `${match.minute}' Kale vuruşu — ${match[newSide].name}`;
+  } else {
+    // === GENEL OUT (kaleci tutuşu, orta alan) ===
+    newBall = { x: 50, y: 35 };
+    newCarrier = null;
+    eventType = 'out_of_play';
+    eventText = extra.text || `${match.minute}' ${reason}`;
+  }
+
   return {
     ok: false,
     events: [{
       minute: match.minute,
-      type: 'out_of_play',
+      type: eventType,
       reason,
       side: match.ballSide,
       actor: extra.actor,
       target: extra.target,
-      text: extra.text || `${match.minute}' ${reason}`,
+      x: match.ballPos.x,
+      y: match.ballPos.y,
+      text: eventText,
     }],
-    newBall: { x: 50, y: 35 },
-    newCarrier: null,
+    newBall,
+    newCarrier,
   };
 }
 

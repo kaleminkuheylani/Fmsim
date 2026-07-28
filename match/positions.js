@@ -77,30 +77,35 @@ export function deployLineup(team, formationId, mirror = false) {
   const used = new Set();
   const fielded = [];
 
-  for (const slot of slots) {
+  for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+    const slot = slots[slotIdx];
     const candidate = team.players
       .filter(p => p.position === slot.role && !used.has(p.id))
       .sort((a, b) => (b.attrs?.[primaryAttrForRole(slot.role)] ?? 0) - (a.attrs?.[primaryAttrForRole(slot.role)] ?? 0))[0];
 
+    const placePlayer = (p) => {
+      used.add(p.id);
+      p.onField = true;
+      p.live.x = mirror ? 100 - slot.x : slot.x;
+      p.live.y = slot.y;
+      // KRİTİK: her oyuncuya kendi slot'unu atıyoruz.
+      // basePositionOf bunu okuyunca her oyuncu kendi formasyon noktasına döner.
+      p.formationSlotIdx = slotIdx;
+      p.formationPos = { x: p.live.x, y: p.live.y };
+      fielded.push(p);
+    };
+
     if (candidate) {
-      used.add(candidate.id);
-      candidate.onField = true;
-      candidate.live.x = mirror ? 100 - slot.x : slot.x;
-      candidate.live.y = slot.y;
-      fielded.push(candidate);
+      placePlayer(candidate);
     } else {
       // yedek oyuncuyu zorla çek (aşağı yukarı aynı rolden)
       const bench = team.players
         .filter(p => !used.has(p.id) && adjacentRole(slot.role).includes(p.position))
         .sort((a, b) => b.attrs?.[primaryAttrForRole(slot.role)] - a.attrs?.[primaryAttrForRole(slot.role)])[0];
       if (bench) {
-        used.add(bench.id);
         bench.position = slot.role; // geçici rol değişimi
         bench.originalPosition = bench.originalPosition || bench.position;
-        bench.onField = true;
-        bench.live.x = mirror ? 100 - slot.x : slot.x;
-        bench.live.y = slot.y;
-        fielded.push(bench);
+        placePlayer(bench);
       }
     }
   }
@@ -128,126 +133,145 @@ export function updatePositions(match) {
 
   for (const teamSide of ['home', 'away']) {
     const team = match[teamSide];
-    const mirror = teamSide === 'away';
     const isMyBall = side === teamSide;
     for (const p of team.players) {
       if (!p.onField) continue;
 
-      // Temel formasyon pozisyonu
-      const base = basePositionOf(p, match.formation[teamSide], mirror);
+      // Temel formasyon pozisyonu (oyuncunun kendi slot'u)
+      const base = basePositionOf(p);
       if (!base) continue;
 
       let targetX = base.x;
       let targetY = base.y;
 
-      // === TOPA GÖRE KONUM ALMA ===
-      // Taşıyıcıya uzaklık
-      const px = mirror ? 100 - p.live.x : p.live.x;
+      // Taşıyıcıya uzaklık (live.x zaten mirror uygulanmış)
+      const px = p.live.x;
       const py = p.live.y;
       const ballX = ball.x;
       const ballY = ball.y;
       const distToBall = Math.hypot(px - ballX, py - ballY);
 
+      // === TAKIM YÖNÜ ===
+      // home soldan sağa, away sağdan sola hücum eder
+      const teamForward = teamSide === 'home' ? 1 : -1;
+
       if (p.position === 'GK') {
-        // Kaleci: top ceza sahasına yaklaşırsa öne çıkar
-        targetX = isMyBall ? base.x + 2 : base.x - Math.max(0, 4 - distToBall / 10);
-        // Top kanattan gelirse kaleci y kayar (daha agresif)
-        targetY = 35 + (ballY - 35) * 0.5;
+        // Kaleci: top ceza sahasına yaklaşırsa öne çıkar (kendi kalesine doğru yön)
+        const ownGoalX = teamSide === 'home' ? 0 : 100;
+        // Top kendi kalesine yakınsa biraz açıl
+        const distToOwnGoal = Math.abs(px - ownGoalX);
+        if (isMyBall) {
+          targetX = base.x;
+        } else if (distToOwnGoal < 25) {
+          targetX = base.x + teamForward * 2;
+        } else {
+          targetX = base.x;
+        }
+        targetY = base.y + (ballY - 35) * 0.5;
       } else if (p.position === 'DF') {
         if (isMyBall) {
-          // Hücumdayız: hafif öne çık (bindirme)
-          targetX = base.x + 5;
-          // Top kanattaysa kanada kay
-          if (distToBall < 25) targetY = base.y + (ballY - base.y) * 0.3;
+          // Hücumdayız: hafif öne çık (savunma genişliği koruyarak)
+          targetX = base.x + teamForward * 4;
+          // Top kanattaysa hafif o tarafa kay
+          if (distToBall < 25) {
+            const yShift = (ballY - base.y) * 0.25;
+            // 4 DF kendi aralarında bölüşsün (slotIdx'e göre)
+            targetY = base.y + yShift;
+          }
         } else {
-          // Savunuyoruz: topa agresif tepki
-          if (distToBall < 10) {
-            // Çok yakın: topu kovala (sürekli topun üstüne)
-            targetX = ballX;
+          // Savunuyoruz: mesafeye göre
+          if (distToBall < 12) {
+            // Yakın: topa pres
+            targetX = ballX + teamForward * -1;
             targetY = ballY;
-          } else if (distToBall < 20) {
-            // Mid: topun yolunu kes
-            targetX = Math.max(base.x - 3, ballX - 3);
-            targetY = base.y + (ballY - base.y) * 0.7;
+          } else if (distToBall < 22) {
+            // Orta: topun yolunu kes
+            targetX = Math.max(base.x + teamForward * -3, ballX + teamForward * -2);
+            targetY = base.y + (ballY - base.y) * 0.6;
           } else {
-            // Uzak: savunma pozisyonu
-            targetX = base.x - 3;
-            targetY = base.y + (ballY - base.y) * 0.2;
+            // Uzak: formasyon pozisyonunda kal
+            targetX = base.x + teamForward * -2;
+            targetY = base.y + (ballY - base.y) * 0.15;
           }
         }
       } else if (p.position === 'OS') {
+        // OS oyuncuları sahada geniş alana yayılsın (iç içe girmesin)
+        // formationPos.zaten unique; base.y'yi koruyarak yayılımı sağla
         if (isMyBall) {
-          // Hücum: pas opsiyonu oluştur, topa desteğe gel
           if (distToBall < 10) {
-            // Çok yakın: pas opsiyonu için kısa mesafe
-            targetX = ballX + (mirror ? -3 : 3);
-            targetY = ballY + (Math.random() - 0.5) * 8;
-          } else {
-            targetX = base.x + 5;
+            // Çok yakın: pas opsiyonu için kısa mesafe (kendi slot y'si korunur)
+            targetX = ballX + teamForward * 2;
+            targetY = base.y + (ballY - base.y) * 0.3;
+          } else if (distToBall < 25) {
+            // Yakın: topa desteğe gel, kendi bölgesinden sapma
+            targetX = base.x + teamForward * 5;
             targetY = base.y + (ballY - base.y) * 0.4;
+          } else {
+            // Uzak: hafif öne çık, formasyonu koru
+            targetX = base.x + teamForward * 4;
+            targetY = base.y + (ballY - base.y) * 0.2;
           }
         } else {
-          // Savunma: topa agresif pres
           if (distToBall < 10) {
-            // Çok yakın: pres
-            targetX = ballX;
+            // Pres
+            targetX = ballX + teamForward * -1;
             targetY = ballY;
           } else if (distToBall < 18) {
-            // Mid: topun yolunu kes
-            targetX = Math.max(base.x - 2, ballX - 3);
-            targetY = base.y + (ballY - base.y) * 0.8;
+            targetX = Math.max(base.x + teamForward * -2, ballX + teamForward * -2);
+            targetY = base.y + (ballY - base.y) * 0.6;
           } else {
-            // Uzak: pozisyon al
-            targetX = base.x - 2;
-            targetY = base.y + (ballY - base.y) * 0.2;
+            targetX = base.x + teamForward * -2;
+            targetY = base.y + (ballY - base.y) * 0.15;
           }
         }
       } else if (p.position === 'FV') {
         if (isMyBall) {
-          // Forvet: hücum et
-          if (distToBall < 15) {
-            // Yakın: topa koş, gol pozisyonu al
-            targetX = Math.min(95, ballX + 5);
-            targetY = base.y + (ballY - base.y) * 0.6;
+          if (distToBall < 12) {
+            // Çok yakın: gol pozisyonu, kaleye yönel
+            targetX = Math.min(95, Math.max(5, ballX + teamForward * 6));
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else if (distToBall < 25) {
+            // Orta: topa koş
+            targetX = base.x + teamForward * 8;
+            targetY = base.y + (ballY - base.y) * 0.5;
           } else {
-            // Uzak: öne çık, boş alana koş
-            targetX = base.x + 8;
-            targetY = base.y + (ballY - base.y) * 0.4;
+            // Uzak: öne koş, gol için pozisyon al
+            targetX = base.x + teamForward * 10;
+            targetY = base.y;
           }
         } else {
-          // Savunma: topa agresif pres
           if (distToBall < 10) {
-            // Çok yakın: kovala
-            targetX = ballX;
+            targetX = ballX + teamForward * -1;
             targetY = ballY;
           } else if (distToBall < 22) {
-            // Mid: topun önüne
-            targetX = Math.max(base.x - 4, ballX - 2);
-            targetY = base.y + (ballY - base.y) * 0.7;
+            targetX = Math.max(base.x + teamForward * -4, ballX + teamForward * -2);
+            targetY = base.y + (ballY - base.y) * 0.5;
           } else {
-            // Uzak: geri dön
-            targetX = base.x - 4;
-            targetY = base.y + (ballY - base.y) * 0.2;
+            // Uzak: geri dönme, formasyonun en önünde kal (savunma yardımına değil,
+            // kontra atak için hazır ol)
+            targetX = base.x + teamForward * -3;
+            targetY = base.y;
           }
         }
       }
 
-      // === HIZ BAZLI HAREKET (lerp yerine) ===
-      // Pozisyona göre taban hız
+      // === HAREKET ===
       const speedBase = p.position === 'GK' ? 0.6
                       : p.position === 'DF' ? 0.9
                       : p.position === 'OS' ? 1.1
-                      : 1.3; // FV
-      // Topa uzaklığa göre urgency (yakınsa çok hızlı)
+                      : 1.3;
       const urgency = distToBall < 8 ? 2.2
                     : distToBall < 15 ? 1.7
                     : distToBall < 25 ? 1.2
                     : distToBall < 40 ? 0.9
-                    : 0.6; // uzak
-      // Yorgunken yavaşla
+                    : 0.6;
       const staminaFactor = (p.live.currentStamina || 100) < 30 ? 0.5 : 1.0;
       const speed = speedBase * urgency * staminaFactor;
-      // Hedefe doğru sabit hızla hareket
+
+      // Sahadan taşmayı engelle (x: 0-100, y: 0-70)
+      targetX = Math.max(2, Math.min(98, targetX));
+      targetY = Math.max(2, Math.min(68, targetY));
+
       const dx = targetX - p.live.x;
       const dy = targetY - p.live.y;
       const dist = Math.hypot(dx, dy);
@@ -256,7 +280,6 @@ export function updatePositions(match) {
         p.live.x += (dx / dist) * step;
         p.live.y += (dy / dist) * step;
       } else {
-        // Hedefe snap (lerp hedefe asla varmaz sorununu çözer)
         p.live.x = targetX;
         p.live.y = targetY;
       }
@@ -264,10 +287,28 @@ export function updatePositions(match) {
   }
 }
 
-function basePositionOf(player, formationId, mirror) {
-  const slots = getFormationPositions(formationId);
-  // Oyuncunun pozisyonuna uygun slot
+function basePositionOf(player) {
+  // Öncelik: oyuncunun kendi atanmış slot'u
+  if (player.formationPos) return { x: player.formationPos.x, y: player.formationPos.y };
+  // Fallback: pozisyona göre ilk slot (eski davranış, deployLineup sonrası gereksiz)
+  const slots = getFormationPositions('442');
   const slot = slots.find(s => s.role === player.position);
   if (!slot) return null;
-  return { x: mirror ? 100 - slot.x : slot.x, y: slot.y };
+  return { x: slot.x, y: slot.y };
+}
+
+/**
+ * Set-piece / out-of-play sonrası tüm oyuncuları kendi formasyon pozisyonlarına
+ * snap'le. Set-piece'ler (taç, kale vuruşu, korner) oyunun "duruş" anıdır —
+ * oyuncular yeni pozisyon alır.
+ */
+export function resetToFormation(match) {
+  for (const side of ['home', 'away']) {
+    for (const p of match[side].players) {
+      if (p.onField && p.formationPos) {
+        p.live.x = p.formationPos.x;
+        p.live.y = p.formationPos.y;
+      }
+    }
+  }
 }

@@ -1,7 +1,7 @@
 // match/simulate.js
 // Ana simülasyon döngüsü. Her dakika 1-3 aksiyon çözünürlür, olaylar state'e eklenir.
 
-import { deployLineup, updatePositions } from './positions.js';
+import { deployLineup, updatePositions, resetToFormation } from './positions.js';
 import { tickStamina } from './calc.js';
 import { decisionWeights, pickAction, pickPassTarget } from './decision.js';
 import { resolveAction } from './events.js';
@@ -157,6 +157,22 @@ function simulateAction(match) {
 
   // Aksiyonu çöz
   const result = resolveAction(match, carrier, action, target);
+
+  // === SET-PIECE: taç / kale vuruşu / out-of-play sonrası oyuncular formasyona döner ===
+  if (result.events) {
+    for (const ev of result.events) {
+      if (ev.type === 'throw_in' || ev.type === 'goal_kick' || ev.type === 'corner' || ev.type === 'out_of_play') {
+        // Yeni top ve taşıyıcıyı state'e uygula
+        if (result.newBall) match.ballPos = result.newBall;
+        if (result.newCarrier) match.ballCarrier = result.newCarrier;
+        else match.ballCarrier = null;
+        // Tüm oyuncuları kendi formasyon pozisyonlarına snap'le
+        resetToFormation(match);
+        // Set-piece sonrası: taşıyıcı zaten yeni pozisyonda, diğer oyuncular formasyonda
+        return;
+      }
+    }
+  }
 
   // State'i güncelle
   if (result.newBall) match.ballPos = result.newBall;
