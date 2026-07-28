@@ -152,6 +152,13 @@
       </div>
 
       <div class="matchboard">
+        <div class="tactic-info" id="tactic-info">
+          <span class="ti-badge" id="ti-form">4-4-2</span>
+          <span class="ti-label">Taktik:</span>
+          <span class="ti-val" id="ti-tactic">Dengeli</span>
+          <span class="ti-sep">vs</span>
+          <span class="ti-val muted" id="ti-ai-tactic">?</span>
+        </div>
         <div class="team-side">
           <div class="ts-name" id="home-name">—</div>
           <div class="ts-stats">
@@ -446,6 +453,67 @@
     <p class="muted">Otomatik değişiklik yapılmaz. İsterseniz Kadro sayfasından manuel değişiklik yapabilirsiniz.</p>
     <div class="modal-actions">
       <button class="btn primary" id="btn-injury-ok">Anladım</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAKTİK + FORMASYON SEÇİMİ -->
+<div id="tactics-modal" class="modal" style="display:none">
+  <div class="modal-box wide">
+    <div class="modal-icon"><i data-lucide="settings-2"></i></div>
+    <h3>Maç Öncesi Taktik</h3>
+    <p class="muted">Strateji ve formasyon seç, maç kaderine etki etsin.</p>
+
+    <div class="tactics-section">
+      <h4>📋 Strateji</h4>
+      <div class="tactics-grid" id="tactics-grid">
+        <button class="tactic-option" data-tactic="defansif">
+          <i data-lucide="shield"></i>
+          <div class="tactic-name">Defansif</div>
+          <div class="tactic-desc">Az risk, az gol. Top tut, geri dön.</div>
+        </button>
+        <button class="tactic-option" data-tactic="kontra">
+          <i data-lucide="zap"></i>
+          <div class="tactic-name">Kontra Atak</div>
+          <div class="tactic-desc">Defansif dur, hızlı çık, kontra vur.</div>
+        </button>
+        <button class="tactic-option selected" data-tactic="normal">
+          <i data-lucide="circle"></i>
+          <div class="tactic-name">Dengeli</div>
+          <div class="tactic-desc">Standart oyun.</div>
+        </button>
+        <button class="tactic-option" data-tactic="kanat">
+          <i data-lucide="arrow-right-left"></i>
+          <div class="tactic-name">Kanat Hücumu</div>
+          <div class="tactic-desc">Bindirmeler, kanattan ortalar.</div>
+        </button>
+        <button class="tactic-option" data-tactic="merkez">
+          <i data-lucide="target"></i>
+          <div class="tactic-name">Merkezden Oyna</div>
+          <div class="tactic-desc">Kısa paslar, merkez penetrasyon.</div>
+        </button>
+        <button class="tactic-option" data-tactic="ofansif">
+          <i data-lucide="flame"></i>
+          <div class="tactic-name">Ofansif</div>
+          <div class="tactic-desc">Yüksek tempo, çok şut, her şey gol.</div>
+        </button>
+      </div>
+    </div>
+
+    <div class="tactics-section">
+      <h4>⚽ Formasyon</h4>
+      <div class="formation-grid" id="formation-grid">
+        <button class="formation-option selected" data-formation="442">4-4-2</button>
+        <button class="formation-option" data-formation="433">4-3-3</button>
+        <button class="formation-option" data-formation="352">3-5-2</button>
+        <button class="formation-option" data-formation="451">4-5-1</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-start-match-confirm">
+        <i data-lucide="play"></i> Maçı Başlat
+      </button>
     </div>
   </div>
 </div>

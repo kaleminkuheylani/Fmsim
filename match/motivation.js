@@ -163,8 +163,8 @@ export class MotivationEngine {
   tryInjuryFromFoul(side, playerId, severity = 'light') {
     const player = this._player(side, playerId);
     if (!player || !player.onField) return null;
-    // Sert faul → %8 sakatlık ihtimali
-    if (Math.random() < 0.08) {
+    // Sert faul → %4 sakatlık ihtimali (yarı yarıya azaltıldı)
+    if (Math.random() < 0.04) {
       return this._injurePlayer(side, player, 'sert faul', severity);
     }
     return null;

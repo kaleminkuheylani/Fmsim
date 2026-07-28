@@ -144,6 +144,15 @@ const els = {
   injuryNoticeModal: $('injury-notice-modal'),
   injuryNoticeMessage: $('injury-notice-message'),
   btnInjuryOk: $('btn-injury-ok'),
+  // tactics
+  tacticsModal: $('tactics-modal'),
+  tacticsGrid: $('tactics-grid'),
+  formationGrid: $('formation-grid'),
+  btnStartMatchConfirm: $('btn-start-match-confirm'),
+  // match tactic info
+  tiForm: $('ti-form'),
+  tiTactic: $('ti-tactic'),
+  tiAiTactic: $('ti-ai-tactic'),
   // squad
   lineupList: $('lineup-list'),
   benchList: $('bench-list'),
@@ -864,7 +873,19 @@ function renderTransferPage() {
 function renderMatchPage() {
   if (!match) return;
   renderScore();
+  renderTacticInfo();
   renderSquadInMatch();
+}
+
+function renderTacticInfo() {
+  if (!els.tiForm) return;
+  const labels = {
+    'defansif': '🛡️ Defansif', 'kontra': '⚡ Kontra Atak', 'normal': '⚖️ Dengeli',
+    'kanat': '↔️ Kanat Hücumu', 'merkez': '🎯 Merkezden Oyna', 'ofansif': '🔥 Ofansif'
+  };
+  if (match.userFormation) els.tiForm.textContent = match.userFormation;
+  if (match.userTactic) els.tiTactic.textContent = labels[match.userTactic] || match.userTactic;
+  if (match.aiTactic) els.tiAiTactic.textContent = labels[match.aiTactic] || match.aiTactic;
 }
 
 function renderScore() {
@@ -1080,6 +1101,23 @@ function updateStandings(fix) {
 }
 
 // === KULLANICI MAÇI ===
+let pendingTactics = { home: 'normal', away: 'normal' };
+let pendingFormation = '442';
+
+function showTacticsModal() {
+  pendingTactics = { home: 'normal', away: 'normal' };
+  pendingFormation = '442';
+  // Taktik state'i reset
+  els.tacticsModal.querySelectorAll('.tactic-option').forEach(b => {
+    b.classList.toggle('selected', b.dataset.tactic === 'normal');
+  });
+  els.tacticsModal.querySelectorAll('.formation-option').forEach(b => {
+    b.classList.toggle('selected', b.dataset.formation === '442');
+  });
+  els.tacticsModal.style.display = 'flex';
+  if (window.lucide) lucide.createIcons();
+}
+
 function startUserMatch(skip = false) {
   if (!game) return;
   const fix = getUserMatchThisWeek();
@@ -1088,16 +1126,40 @@ function startUserMatch(skip = false) {
   const opp = getOpponentTeam();
   if (!user || !opp) return;
 
+  // Eğer skip modu AÇIKSA direkt başla (modal atla)
+  if (skip) {
+    // Skip için default taktik
+    pendingTactics = { home: 'normal', away: 'normal' };
+    pendingFormation = '442';
+    launchMatch(user, opp, fix, true);
+  } else {
+    showTacticsModal();
+  }
+}
+
+function launchMatch(user, opp, fix, skip) {
   resetOnFieldForMatch(opp);
   const homeTeam = fix.homeId === 'user' ? user : opp;
   const awayTeam = fix.homeId === 'user' ? opp : user;
   selectedInMatch = fix.homeId === 'user' ? 'home' : 'away';
 
+  // Taktik: kullanıcı tarafına seçili, AI rakibe random
+  const userTactic = fix.homeId === 'user' ? pendingTactics.home : pendingTactics.away;
+  const aiTactics = ['defansif', 'kontra', 'normal', 'kanat', 'merkez', 'ofansif'];
+  const aiTactic = aiTactics[Math.floor(Math.random() * aiTactics.length)];
+
   match = makeMatchState({
     home: homeTeam, away: awayTeam,
-    homeFormation: '442', awayFormation: '442',
+    homeFormation: pendingFormation, awayFormation: '442',
   });
   match.mode = 'manager';
+  match.tactics = {
+    [fix.homeId === 'user' ? 'home' : 'away']: userTactic,
+    [fix.homeId === 'user' ? 'away' : 'home']: aiTactic,
+  };
+  match.aiTactic = aiTactic;
+  match.userTactic = userTactic;
+  match.userFormation = pendingFormation;
   startMatchOrig(match);
 
   allEvents = [];
@@ -1107,11 +1169,16 @@ function startUserMatch(skip = false) {
   matchStartTime = Date.now();
   matchSecondsElapsed = 0;
 
+  // Taktik bilgisini narrative'e ekle
+  const tacticLabel = {
+    'defansif': '🛡️ Defansif', 'kontra': '⚡ Kontra Atak', 'normal': '⚖️ Dengeli',
+    'kanat': '↔️ Kanat Hücumu', 'merkez': '🎯 Merkezden Oyna', 'ofansif': '🔥 Ofansif'
+  };
+  appendNarrativeText(0, `📋 Taktik: ${tacticLabel[userTactic] || userTactic} | Formasyon: ${pendingFormation} | Rakip: ${tacticLabel[aiTactic] || aiTactic}`);
+
   if (skip) {
-    // Skip: tüm maçı hızlı simüle et
     runFullMatch();
   } else {
-    // Normal: 3 dakika canlı
     navigate('/match');
     renderScore();
     startTimer();
@@ -1656,6 +1723,31 @@ function showInjuryNotice(player) {
 
 els.btnInjuryOk?.addEventListener('click', () => {
   els.injuryNoticeModal.style.display = 'none';
+});
+
+// Taktik seçimi
+els.tacticsGrid?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tactic-option');
+  if (!btn) return;
+  els.tacticsGrid.querySelectorAll('.tactic-option').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  pendingTactics.home = btn.dataset.tactic;
+  pendingTactics.away = btn.dataset.tactic;
+});
+els.formationGrid?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.formation-option');
+  if (!btn) return;
+  els.formationGrid.querySelectorAll('.formation-option').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  pendingFormation = btn.dataset.formation;
+});
+els.btnStartMatchConfirm?.addEventListener('click', () => {
+  els.tacticsModal.style.display = 'none';
+  // Maçı başlat
+  const user = getUserTeam();
+  const opp = getOpponentTeam();
+  const fix = getUserMatchThisWeek();
+  if (user && opp && fix) launchMatch(user, opp, fix, false);
 });
 
 // === OYUNCU DETAY SAYFASI ===

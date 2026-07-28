@@ -20,6 +20,8 @@ export function startMatch(match) {
   deployLineup(match.away, match.formation.away, true);
   match.ballPos = { x: 50, y: 35 };
   match.ballSide = Math.random() < 0.5 ? 'home' : 'away';
+  // Taktik varsayılanları
+  if (!match.tactics) match.tactics = { home: 'normal', away: 'normal' };
   // Başlangıç carrier = en yakın oyuncu
   const side = match.ballSide;
   const team = match[side];
@@ -267,7 +269,7 @@ function maybeFoul(match, carrier) {
   match.events.push(foulEv);
 
   // Kart (%25 sarı) — motivation engine üzerinden
-  if (def.live.yellowCards >= 1 || Math.random() < 0.20) {
+  if (def.live.yellowCards >= 1 || Math.random() < 0.10) {
     const cardSide = match.ballSide === 'home' ? 'away' : 'home';
     // Motivation engine'e bildir (kırmızı kontrolü, morale etkisi burada)
     const cardResult = match.motivation
@@ -300,7 +302,7 @@ function maybeFoul(match, carrier) {
       }
 
       // Direkt kırmızı kart (nadir): %1 ihtimal
-      if (cardResult.kind === 'yellow' && Math.random() < 0.01) {
+      if (cardResult.kind === 'yellow' && Math.random() < 0.005) {
         const redResult = match.motivation.giveCard(cardSide, def.id, 'red');
         if (redResult) {
           match.events.push(redResult.event);

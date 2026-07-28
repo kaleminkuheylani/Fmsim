@@ -116,6 +116,30 @@ export function decisionWeights(player, match) {
   const leadership = getEffective(player, 'leadership');
   if (leadership > 75 && match.minute > 70) passShort *= 1.1; // oyunu soğutma eğilimi
 
+  // === TAKTİK ÇARPANI ===
+  const tactics = match.tactics?.[side] || 'normal';
+  switch (tactics) {
+    case 'defansif':
+      shoot *= 0.5; passShort *= 0.8; passLong *= 0.5; cross *= 0.4;
+      hold *= 1.5; recycle *= 1.3; dribble *= 0.6;
+      break;
+    case 'kontra':
+      // Top bizdeyken defansif, hızlı çıkışlar
+      if (x < 50) { hold *= 0.6; shoot *= 0.7; }
+      if (x > 70) { shoot *= 1.6; passLong *= 1.3; cross *= 1.2; }
+      break;
+    case 'kanat':
+      cross *= 1.8; passLong *= 1.2; shoot *= 0.85;
+      break;
+    case 'merkez':
+      passShort *= 1.4; passLong *= 0.6; cross *= 0.3; dribble *= 1.2;
+      break;
+    case 'ofansif':
+      shoot *= 1.6; cross *= 1.3; passLong *= 1.2; dribble *= 1.2;
+      hold *= 0.5; recycle *= 0.5;
+      break;
+  }
+
   return { shoot, passShort, passLong, cross, dribble, hold, recycle };
 }
 
