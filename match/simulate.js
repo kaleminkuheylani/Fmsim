@@ -158,26 +158,54 @@ function simulateAction(match) {
   // Aksiyonu çöz
   const result = resolveAction(match, carrier, action, target);
 
-  // === SET-PIECE: taç / kale vuruşu / out-of-play sonrası oyuncular formasyona döner ===
+  // === SET-PIECE kontrolü: taç / kale vuruşu / out-of-play sonrası oyuncular formasyona döner ===
+  let isSetPiece = false;
   if (result.events) {
     for (const ev of result.events) {
       if (ev.type === 'throw_in' || ev.type === 'goal_kick' || ev.type === 'corner' || ev.type === 'out_of_play') {
-        // Yeni top ve taşıyıcıyı state'e uygula
-        if (result.newBall) match.ballPos = result.newBall;
-        if (result.newCarrier) match.ballCarrier = result.newCarrier;
-        else match.ballCarrier = null;
-        // Tüm oyuncuları kendi formasyon pozisyonlarına snap'le
-        resetToFormation(match);
-        // Set-piece sonrası: taşıyıcı zaten yeni pozisyonda, diğer oyuncular formasyonda
-        return;
+        isSetPiece = true;
+        break;
       }
     }
+  }
+
+  // Event'leri HER DURUMDA push et (önce)
+  if (result.events) {
+    match.events.push(...result.events);
+    const last = result.events[result.events.length - 1];
+    if (last) {
+      match.lastEvent = last;
+      match.lastEventMinute = match.minute;
+      match.lastEventType = last.type;
+    }
+  }
+
+  if (isSetPiece) {
+    // Yeni top ve taşıyıcıyı state'e uygula
+    if (result.newBall) match.ballPos = result.newBall;
+    if (result.newCarrier) {
+      match.ballCarrier = result.newCarrier;
+      // KRİTİK INVARIANT: ballSide her zaman ballCarrier.side ile aynı olmalı.
+      // Aksi halde sonraki tick'te pickPassTarget yanlış takımdan seçer
+      // ve oyuncu "kendisi" rakibe pas atar.
+      match.ballSide = result.newCarrier.side;
+    } else {
+      match.ballCarrier = null;
+    }
+    // Tüm oyuncuları kendi formasyon pozisyonlarına snap'le
+    resetToFormation(match);
+    // Set-piece sonrası: taşıyıcı zaten yeni pozisyonda, diğer oyuncular formasyonda
+    return;
   }
 
   // State'i güncelle
   if (result.newBall) match.ballPos = result.newBall;
   if (result.newCarrier) {
     match.ballCarrier = result.newCarrier;
+    // Aynı invariant: yeni taşıyıcı farklı takımdansa ballSide'i güncelle
+    if (result.newCarrier.side !== match.ballSide) {
+      match.ballSide = result.newCarrier.side;
+    }
   } else {
     match.ballCarrier = null;
   }

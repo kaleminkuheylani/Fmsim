@@ -279,7 +279,12 @@ function resolveDribble(match, carrier) {
     .sort((a, b) => a.d - b.d)[0];
 
   if (!nearest || nearest.d > 10) {
-    // Kimse yakın değil, serbest ilerle
+    // Kimse yakın değil — bazen kontrolsüz top auta
+    if (Math.random() < 0.05) {
+      match.ballPos.y = match.ballPos.y < 35 ? 3 : 67;
+      return outOfPlay(match, 'dribble_kontrolsuz', 'away', { actor: carrier.id });
+    }
+    // Serbest ilerle
     const dirX = side === 'home' ? 15 : -15;
     const newBall = { x: Math.max(0, Math.min(100, match.ballPos.x + dirX)), y: match.ballPos.y + (Math.random() - 0.5) * 4 };
     return {
@@ -314,7 +319,12 @@ function resolveDribble(match, carrier) {
     };
   }
 
-  // Top kaybedildi
+  // Top kaybedildi — bazen top auta çıkar (taç için)
+  if (Math.random() < 0.15) {
+    // Topu yan çizgiye doğru "fırlat" ki outOfPlay taça çevirsin
+    match.ballPos.y = match.ballPos.y < 35 ? 3 : 67;
+    return outOfPlay(match, 'dripling_kayip', 'away', { actor: carrier.id, target: nearest.p.id });
+  }
   return turnover(match, carrier, nearest.p, 'dripling_kayip');
 }
 
@@ -397,12 +407,20 @@ function outOfPlay(match, reason, newSide, extra = {}) {
   const ballY = match.ballPos.y;
   const ballX = match.ballPos.x;
 
+  // Eğer top saha içindeyse, önce yan çizgiye kaydır ki set-piece tetiklensin.
+  // Gerçek futbolda her out bir taç/korner/kale vuruşudur — top saha içinde
+  // "out" olmaz, otomatik olarak orta sahaya dönmez.
+  if (ballY > 8 && ballY < 62 && ballX > 3 && ballX < 97) {
+    // Topu yan çizgiye doğru kaydır
+    match.ballPos.y = ballY < 35 ? 4 : 66;
+  }
+
   // Top nereye gitti?
   // - Yan çizgi (y < 8 veya y > 62): TAÇ (rakip takım atar)
   // - Kale çizgisi (x < 3 veya x > 97): KALE VURUŞU (kaleci alır)
   // - Geri kalan: genel out (orta saha, kaleci tutuşu vs.)
-  const isTouchline = ballY < 8 || ballY > 62;
-  const isGoalLine = ballX < 3 || ballX > 97;
+  const isTouchline = match.ballPos.y < 8 || match.ballPos.y > 62;
+  const isGoalLine = match.ballPos.x < 3 || match.ballPos.x > 97;
 
   let eventType, eventText, newBall, newCarrier;
 
