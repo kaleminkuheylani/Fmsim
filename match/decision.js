@@ -1,176 +1,238 @@
 // match/decision.js
-// Top taşıyan oyuncunun karar mekanizması.
-// Yeteneklere + bağlama + tehlike seviyesine göre aksiyon seçer.
+// Oyuncunun karar mekanizması — PRIORITY TREE (rastgele ağırlık değil)
+//
+// Oyuncu "düşünür" (context-aware):
+//   1. Kale yakın ve açıksa + yetenek yeterliyse → ŞUT
+//   2. Önünde rakip var + arkadaşı daha iyi pozisyondaysa → PAS
+//   3. Kanattaysa + ceza sahasına yakınsa + crossing iyiyse → ORTA
+//   4. Gerideyse + defansif taktikteyse → GERİ PAS veya TUT
+//   5. DEFAULT: DRIBLING (sür)
+//
+// "Zeka" = decisions + vision. Yüksek zeka:
+//   - Daha uzaktan şut çeker
+//   - Daha uzak rakibi görür (pas kararı)
+//   - Daha iyi pas hedefi seçer
+// Edge case'lerde (eşit koşullar) küçük bir randomness var — gerçek futbolda
+// oyuncu "şaşırabilir" veya "farklı seçebilir". Bu yüzden 1-2 yerde Math.random().
 
 import { getEffective } from './calc.js';
-import { inAnyBox, threatOf } from './state.js';
+import { inAnyBox, inHomeBox, inAwayBox } from './state.js';
 
-const ACTIONS = ['shoot', 'passShort', 'passLong', 'cross', 'dribble', 'hold', 'recycle'];
+// === YARDIMCI: nokta-segment mesafesi ===
+// p noktasının (px, py) ile (x1,y1)-(x2,y2) segmenti arasındaki en kısa mesafe
+function distPointToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
 
-/**
- * Karar ağırlıklarını hesapla — oyuncunun aksiyon seçim skoru.
- *   player: oyuncu
- *   match: state
- *
- * Dönüş: { shoot: 0.7, passShort: 0.5, passLong: 0.2, ... }
- */
-export function decisionWeights(player, match) {
+// === ZEKA SEVİYESİ (0-100) ===
+// Oyuncunun "durum değerlendirme" kalitesi
+function intelligence(player) {
+  const decisions = getEffective(player, 'decisions');
+  const vision = getEffective(player, 'vision');
+  return decisions * 0.55 + vision * 0.45;
+}
+
+// === TAKTİK ÇARPANLARI (deterministik threshold değişimi) ===
+// Ofansif taktik → şut eşiği düşer, dribling artar
+// Defansif taktik → pas eşiği yükselir, hold/recycle artar
+const TACTIC_THRESHOLDS = {
+  defansif: { shootRange: -6, passDetection: -3, holdBoost: 1.5 },
+  kontra:   { shootRange:  2, passDetection:  0, holdBoost: 0.5 },
+  kanat:    { shootRange: -2, passDetection:  0, holdBoost: 0.7 },
+  merkez:   { shootRange: -1, passDetection:  2, holdBoost: 0.8 },
+  ofansif:  { shootRange:  4, passDetection:  0, holdBoost: 0.3 },
+  normal:   { shootRange:  0, passDetection:  0, holdBoost: 1.0 },
+};
+
+// === KARAR 1: ŞUT ETMELİ Mİ? ===
+// Kale yakın mı, açık mı, oyuncunun yetenekleri yeterli mi?
+function shouldShoot(player, match) {
   const ball = match.ballPos;
   const side = match.ballSide;
-  const x = side === 'home' ? ball.x : 100 - ball.x; // saldıran taraf için normalize
   const inBox = inAnyBox(ball.x, ball.y);
+  const intel = intelligence(player);
+  const composure = getEffective(player, 'composure');
+  const finishing = getEffective(player, 'finishing');
 
-  // Tehdit seviyesi (0-1)
-  const threat = threatOf(ball.x, ball.y, side);
+  // Pozisyon kısıtı: sadece FV ve OS şut çekebilir
+  if (player.position !== 'FV' && player.position !== 'OS') return false;
+  // GK asla şut çekmez
+  if (player.position === 'GK') return false;
 
-  // Stamina / yorgunluk
+  // Şut aralığı (intelligence + taktik + pozisyon)
+  const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
+  let shootRange = 16 + (intel - 50) / 5 + tactic.shootRange; // 6-26 arası
+  if (player.position === 'FV') shootRange += 5;
+
+  const goalX = side === 'home' ? 100 : 0;
+  const distToGoal = Math.hypot(ball.x - goalX, ball.y - 35);
+  if (distToGoal > shootRange) return false;
+
+  // Kutuda: neredeyse her zaman şut (oyuncu bitirmeli)
+  if (inBox) {
+    // Düşük composure bazen panik yapar (kale ağzında pas atabilir)
+    if (composure < 35 && Math.random() < 0.3) return false;
+    return true;
+  }
+
+  // Kutunun dışında: blok var mı kontrol et
+  const opp = side === 'home' ? match.away : match.home;
+  const opponentsBlocking = opp.players.filter(p => {
+    if (!p.onField || p.position === 'GK') return false;
+    const d = distPointToSegment(p.live.x, p.live.y, ball.x, ball.y, goalX, 35);
+    return d < 5; // 5 birim yakın = şut çizgisini kapatıyor
+  }).length;
+  if (opponentsBlocking > 0) return false;
+
+  // Uzak şut: bitiricilik + composure yeterli mi?
+  if (distToGoal > 18) {
+    const shootPower = finishing * 0.6 + composure * 0.4;
+    if (shootPower < 55) return false;
+  }
+
+  return true;
+}
+
+// === KARAR 2: PAS ATMALI MI? ===
+// Önünde rakip var mı + takım arkadaşı daha iyi pozisyonda mı?
+function shouldPass(player, match) {
+  const ball = match.ballPos;
+  const side = match.ballSide;
+  const intel = intelligence(player);
+  const vision = getEffective(player, 'vision');
+  const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
+
+  // Pas aralığı (intelligence + taktik): oyuncu ne kadar uzağı görür
+  const detectionRange = 7 + (intel - 50) / 5 + tactic.passDetection;
+
+  // Önünde rakip var mı?
+  const opp = side === 'home' ? match.away : match.home;
+  const forwardDir = side === 'home' ? 1 : -1;
+  const opponentsAhead = opp.players.filter(p => {
+    if (!p.onField || p.position === 'GK') return false;
+    const dx = (p.live.x - ball.x) * forwardDir;
+    if (dx < 2) return false; // arkamızda veya yanimızda
+    if (dx > detectionRange + 5) return false; // çok uzakta
+    const dist = Math.hypot(p.live.x - ball.x, p.live.y - ball.y);
+    return dist < detectionRange;
+  }).length;
+  if (opponentsAhead === 0) return false; // önü açık → sür
+
+  // Takım arkadaşı daha iyi pozisyonda mı?
+  const goalX = side === 'home' ? 100 : 0;
+  const team = match[side];
+  const myDistToGoal = Math.hypot(ball.x - goalX, ball.y - 35);
+  const teammatesInBetterPos = team.players.filter(p => {
+    if (!p.onField || p.id === player.id) return false;
+    const pDist = Math.hypot(p.live.x - goalX, p.live.y - 35);
+    return pDist < myDistToGoal - 8; // 8 birim daha yakın olmalı
+  }).length;
+  if (teammatesInBetterPos === 0) return false;
+
+  // Düşük vision = bazen sürüp kaybedebilir (pası "görmez")
+  if (vision < 40 && Math.random() < 0.4) return false;
+
+  return true;
+}
+
+// === KARAR 3: ORTA ATMAK MI? ===
+// Kanattaysa + ceza sahası yakınsa + crossing iyiyse
+function shouldCross(player, match) {
+  const ball = match.ballPos;
+  const side = match.ballSide;
+
+  // Kanatta mı? (y < 25 sol, y > 45 sağ)
+  if (ball.y > 25 && ball.y < 45) return false;
+
+  const crossing = getEffective(player, 'crossing');
+  if (crossing < 55) return false;
+
+  const goalX = side === 'home' ? 100 : 0;
+  const distToGoal = Math.hypot(ball.x - goalX, ball.y - 35);
+  if (distToGoal > 35 || distToGoal < 12) return false;
+
+  return true;
+}
+
+// === KARAR 4: TUT / GERİ PAS MI? ===
+// Gerideyse, defansif taktikteyse veya baskı altındaysa
+function shouldHoldOrRecycle(player, match) {
+  const ball = match.ballPos;
+  const side = match.ballSide;
+  const x = side === 'home' ? ball.x : 100 - ball.x; // normalized
   const stamina = player.live?.currentStamina ?? 100;
-  const tired = stamina < 40;
+  const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
 
-  // 1) ŞUT — sadece hücum oyuncuları için, sadece tehlikeli bölgede
-  let shoot = 0;
-  if (player.position === 'FV' || player.position === 'OS') {
-    if (inBox) {
-      shoot = 0.9 + threat * 0.1;
-    } else if (x > 78) {
-      shoot = 0.5 + threat * 0.2;
-    } else if (x > 65 && player.position === 'FV') {
-      // Sadece FV'ler uzaktan şut deneyebilir
-      shoot = 0.10;
+  // Gerideyse (x < 30) ve defansif taktikteyse
+  if (x < 30 && tactic.holdBoost > 1.0) return true;
+  // Çok yorgunsa (stamina < 25) → tut
+  if (stamina < 25) return true;
+  // GK zaten şut çekmez, topu oynar
+  if (player.position === 'GK') return true;
+  return false;
+}
+
+// === PAS TİPİ SEÇİMİ: kısa mı uzun mı? ===
+// En uygun takım arkadaşına olan mesafeye göre
+export function pickPassType(player, match) {
+  const side = match.ballSide;
+  const team = match[side];
+  const goalX = side === 'home' ? 100 : 0;
+  const ball = match.ballPos;
+
+  // En iyi pas hedefini bul (vizyon + mesafe + ileri)
+  let bestTarget = null;
+  let bestScore = -Infinity;
+  for (const p of team.players) {
+    if (!p.onField || p.id === player.id) continue;
+    const dist = Math.hypot(p.live.x - ball.x, p.live.y - ball.y);
+    if (dist < 5 || dist > 50) continue;
+    const forwardDelta = side === 'home'
+      ? p.live.x - ball.x
+      : ball.x - p.live.x;
+    // Skor: ileri + yakın + alıcının bitiriciliği
+    const score = (forwardDelta * 2) - (dist * 0.5) + (getEffective(p, 'firstTouch') * 0.3);
+    if (score > bestScore) {
+      bestScore = score;
+      bestTarget = { player: p, distance: dist, forward: forwardDelta };
     }
   }
-  // Bitiricilik yetenekleri bu aksiyonu kuvvetlendirir
-  const finishing = getEffective(player, 'finishing');
-  const composure = getEffective(player, 'composure');
-  const longShots = getEffective(player, 'longShots');
-  const shooting = getEffective(player, 'shooting');
-  if (inBox) {
-    shoot *= 0.5 + (finishing + composure) / 200; // 50-150% arası
-  } else {
-    shoot *= 0.3 + (longShots + shooting) / 250;
-  }
 
-  // 2) KISA PAS
-  let passShort = 0.30; // biraz azaltıldı — eskiden 0.4, dribling lehine
-  if (inBox) passShort = 0.10; // kutuda az tercih, şut kazansın
-  if (x < 30) passShort = 0.55; // geride güvenli oyun
-  const passing = getEffective(player, 'passing');
-  const vision = getEffective(player, 'vision');
-  const decisions = getEffective(player, 'decisions');
-  passShort *= 0.5 + (passing * 0.6 + vision * 0.3 + decisions * 0.1) / 100;
-
-  // 3) UZUN PAS
-  let passLong = 0.15;
-  if (x > 50 && !inBox) passLong = 0.30; // orta sahadan ileri
-  if (x < 25) passLong = 0.40; // geriden başlat
-  const firstTouch = getEffective(player, 'firstTouch');
-  passLong *= 0.4 + (passing * 0.4 + vision * 0.4 + firstTouch * 0.2) / 100;
-
-  // 4) ORTA
-  let cross = 0;
-  if (x > 50 && ball.y < 25) cross = 0.45; // sol kanat
-  if (x > 50 && ball.y > 45) cross = 0.45; // sağ kanat
-  if (inBox) cross = 0.10;
-  if (x < 50) cross = 0.08;
-  const crossing = getEffective(player, 'crossing');
-  const fl = getEffective(player, 'flair');
-  cross *= 0.5 + (crossing * 0.7 + fl * 0.3) / 100;
-
-  // 5) DRIPLING — önemli ölçüde artırıldı
-  let dribble = 0.50; // base 0.25'ten 0.50'ye
-  if (x > 25 && x < 75 && !inBox) dribble = 0.85; // orta sahada çok aktif
-  if (inBox) dribble = 0.45; // kutuda da deneyebilir
-  if (x < 20) dribble = 0.20; // geride riskli
-  // Pozisyon bazlı bonus
-  if (player.position === 'FV' && x > 40) dribble += 0.30; // forvetler bireysel başlatır
-  if (player.position === 'OS' && x > 30 && x < 70) dribble += 0.20; // orta saha yaratıcı
-  const dribbling = getEffective(player, 'dribbling');
-  const agility = getEffective(player, 'agility');
-  const pace = getEffective(player, 'pace');
-  const fl2 = getEffective(player, 'flair');
-  dribble *= 0.5 + (dribbling * 0.4 + agility * 0.25 + pace * 0.2 + fl2 * 0.15) / 100;
-
-  // 6) TOP TUT (hold)
-  let hold = 0.1;
-  if (tired) hold = 0.4; // yorgunken top saklama
-  if (inBox) hold = 0.05;
-  hold *= 0.7 + composure / 200;
-
-  // 7) GERİ DÖNÜŞ (recycle)
-  let recycle = 0.1;
-  if (x < 30) recycle = 0.35; // geride güvenli geri pas
-
-  // Stamina etkisi — yorgun oyuncu daha az hareket
-  if (tired) {
-    dribble *= 0.6;
-    cross *= 0.7;
-    passLong *= 0.7;
-    hold *= 1.3;
-  }
-
-  // Saldıran taraf öne gittikçe şut artar (son bölüm)
-  // Bu, mantıken: dakika 80+ geride olan taraf daha çok şut çeker
-  // (bunu caller ekleyebilir)
-
-  // Agresiflik
-  const aggression = getEffective(player, 'aggression');
-  if (aggression > 70 && x > 60) shoot *= 1.15;
-
-  // Liderlik
-  const leadership = getEffective(player, 'leadership');
-  if (leadership > 75 && match.minute > 70) passShort *= 1.1; // oyunu soğutma eğilimi
-
-  // === TAKTİK ÇARPANI ===
-  const tactics = match.tactics?.[side] || 'normal';
-  switch (tactics) {
-    case 'defansif':
-      shoot *= 0.5; passShort *= 0.8; passLong *= 0.5; cross *= 0.4;
-      hold *= 1.5; recycle *= 1.3; dribble *= 0.6;
-      break;
-    case 'kontra':
-      // Top bizdeyken defansif, hızlı çıkışlar
-      if (x < 50) { hold *= 0.6; shoot *= 0.7; }
-      if (x > 70) { shoot *= 1.6; passLong *= 1.3; cross *= 1.2; }
-      break;
-    case 'kanat':
-      cross *= 1.8; passLong *= 1.2; shoot *= 0.85;
-      break;
-    case 'merkez':
-      passShort *= 1.4; passLong *= 0.6; cross *= 0.3; dribble *= 1.2;
-      break;
-    case 'ofansif':
-      shoot *= 1.6; cross *= 1.3; passLong *= 1.2; dribble *= 1.2;
-      hold *= 0.5; recycle *= 0.5;
-      break;
-  }
-
-  return { shoot, passShort, passLong, cross, dribble, hold, recycle };
+  if (!bestTarget) return 'passShort'; // fallback
+  if (bestTarget.distance <= 18) return 'passShort';
+  return 'passLong';
 }
 
-/**
- * Ağırlıklı seçim → aksiyon.
- */
-export function pickAction(player, match) {
-  const w = decisionWeights(player, match);
-  // pickAction burada
-  const entries = Object.entries(w);
-  const total = entries.reduce((s, [_, v]) => s + Math.max(0, v), 1e-9);
-  let r = Math.random() * total;
-  for (const [action, weight] of entries) {
-    r -= Math.max(0, weight);
-    if (r <= 0) return action;
+// === ANA KARAR FONKSİYONU (priority tree) ===
+export function decideAction(player, match) {
+  // 1) ŞUT — en yüksek öncelik
+  if (shouldShoot(player, match)) return 'shoot';
+
+  // 2) ORTA — kanattaysa ve orta atmak mantıklıysa
+  if (shouldCross(player, match)) return 'cross';
+
+  // 3) PAS — önü kapalı + arkadaşı iyi pozisyonda
+  if (shouldPass(player, match)) return pickPassType(player, match);
+
+  // 4) TUT / GERİ PAS — gerideyse veya yorgunsa veya defansif taktikteyse
+  if (shouldHoldOrRecycle(player, match)) {
+    const ball = match.ballPos;
+    const x = match.ballSide === 'home' ? ball.x : 100 - ball.x;
+    // Gerideyse recycle (geri pas), yoksa hold (top sakla)
+    if (x < 30) return 'recycle';
+    return 'hold';
   }
-  return entries[entries.length - 1][0];
+
+  // 5) DEFAULT: DRIBLING (top sürmek)
+  // Oyuncu "akıllıysa" (yüksek intelligence) bazen agresif ilerler
+  return 'dribble';
 }
 
-/**
- * Pas hedefi seç (kısa/uzun/orta).
- *   carrier: pas atan
- *   match: state
- *   type: 'short' | 'long' | 'cross'
- *
- * Dönüş: { side, playerId, x, y, distance, success }
- */
 export function pickPassTarget(carrier, match, type = 'short') {
   const side = match.ballSide;
   const team = match[side];
@@ -231,4 +293,21 @@ export function pickPassTarget(carrier, match, type = 'short') {
     if (r <= 0) return { side, playerId: c.target.id, distance: c.distance };
   }
   return { side, playerId: top[0].target.id, distance: top[0].distance };
+}
+
+// === ESKİ API UYUMLULUĞU ===
+// Bazı yerlerde decisionWeights + pickAction kullanılıyor, onları koruyalım
+export function decisionWeights(player, match) {
+  const action = decideAction(player, match);
+  // Seçilen aksiyonun ağırlığı 1, diğerleri 0 (backward compat)
+  const weights = {
+    shoot: 0, passShort: 0, passLong: 0, cross: 0,
+    dribble: 0, hold: 0, recycle: 0,
+  };
+  weights[action] = 1.0;
+  return weights;
+}
+
+export function pickAction(player, match) {
+  return decideAction(player, match);
 }
