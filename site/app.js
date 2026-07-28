@@ -1108,6 +1108,9 @@ function playWeek(skip = false) {
   // Tüm takımlar: sakatlık iyileşmesi + ceza sıfırlama + yeni sakatlık üret
   applyWeeklyStatusChanges(next);
 
+  // Doğal gelişim: yavaş, bedava, yaşa göre (tüm takımlar)
+  applyNaturalDevelopment(next);
+
   // CPU teklifleri üret
   generateOffers(next);
 
@@ -1426,6 +1429,38 @@ function applyWeeklyStatusChanges(currentWeek) {
 // Geriye uyumluluk
 function recoverPlayers(currentWeek) {
   applyWeeklyStatusChanges(currentWeek);
+}
+
+// === DOĞAL GELİŞİM (haftalık, yavaş, bedava) ===
+// Oyuncular yaşlarına göre yavaş yavaş gelişir. Mevcut yetenekleri koruyarak
+// potansiyellerine doğru tırmanır. Antrenman (manuel) ile çakışmaz, eklenir.
+// İki mantık birleşir: haftalık otomatik (bedava, yavaş) + antrenman (pahalı, hızlı).
+function applyNaturalDevelopment(currentWeek) {
+  if (!game?.league?.teams) return;
+  for (const team of game.league.teams) {
+    for (const p of team.players) {
+      if (!p.attrs || p.live?.injured) continue; // sakatken gelişmez
+      const age = p.age || 25;
+      const potential = p.potential || 80;
+      // Yaşa göre haftalık delta: gençler hızlı, yaşlılar düşer
+      let weeklyDelta = 0;
+      if (age <= 19) weeklyDelta = 0.4;
+      else if (age <= 22) weeklyDelta = 0.3;
+      else if (age <= 26) weeklyDelta = 0.2;
+      else if (age <= 29) weeklyDelta = 0.05;
+      else if (age <= 32) weeklyDelta = -0.1;
+      else weeklyDelta = -0.2;
+      // Rastgele küçük varyans
+      weeklyDelta += (Math.random() - 0.5) * 0.1;
+      // Pozisyon ağırlığı: anahtar alanlar daha hızlı gelişir
+      for (const key in p.attrs) {
+        const current = p.attrs[key];
+        let delta = weeklyDelta;
+        if (current >= potential) delta = Math.min(delta, 0); // potansiyel aşılamaz (otomatik)
+        p.attrs[key] = Math.max(20, Math.min(99, current + delta));
+      }
+    }
+  }
 }
 
 // Skip: tüm maçı 5 saniyede bitir
