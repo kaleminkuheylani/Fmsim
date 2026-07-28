@@ -840,9 +840,66 @@ function renderLineupPage() {
 
   // Formasyon değişim
   els.lineupFormation?.addEventListener('change', (e) => {
-    lineupState.formation = e.target.value;
+    const newFormation = e.target.value;
+    const oldFormation = lineupState.formation;
+    if (newFormation === oldFormation) return;
+    // Mevcut oyuncuları koru — sadece yeniden konumlandır
+    const user = getUserTeam();
+    if (!user) {
+      lineupState.formation = newFormation;
+      lineupState.slots = Array(11).fill(null);
+      drawPitch();
+      return;
+    }
+    // Mevcut slotlardaki oyuncu ID'lerini al
+    const oldPlayerIds = lineupState.slots.filter(s => s !== null);
+    lineupState.formation = newFormation;
     lineupState.slots = Array(11).fill(null);
+    if (oldPlayerIds.length === 0) {
+      drawPitch();
+      return;
+    }
+    const newSlots = TACTIC_FORMATIONS[newFormation] || TACTIC_FORMATIONS['442'];
+    // Oyuncuları pozisyonlarına göre grupla (GK→DF→OS→FV)
+    const posOrder = { GK: 1, DF: 2, OS: 3, FV: 4 };
+    const fielded = oldPlayerIds.map(id => user.players.find(p => p.id === id)).filter(Boolean);
+    fielded.sort((a, b) => (posOrder[a.position] || 5) - (posOrder[b.position] || 5));
+    // Yeni slotları pozisyona göre grupla
+    const slotByRole = { GK: [], DF: [], OS: [], FV: [] };
+    newSlots.forEach((s, i) => slotByRole[s.role].push(i));
+    // Oyuncuları uygun slotlara yerleştir
+    const usedSlots = new Set();
+    // Önce tam eşleşen pozisyonlar
+    for (const p of fielded) {
+      const candidates = slotByRole[p.position] || [];
+      const slot = candidates.find(i => !usedSlots.has(i));
+      if (slot !== undefined) {
+        lineupState.slots[slot] = p.id;
+        usedSlots.add(slot);
+      }
+    }
+    // Kalan oyuncular (uyuşmayan) → herhangi bir boş slota
+    for (const p of fielded) {
+      if (lineupState.slots.includes(p.id)) continue;
+      const emptySlot = newSlots.findIndex((s, i) => !usedSlots.has(i));
+      if (emptySlot >= 0) {
+        lineupState.slots[emptySlot] = p.id;
+        usedSlots.add(emptySlot);
+      }
+    }
+    // Eğer yeni formasyonda daha az slot varsa (imkansız ama koruma) → fazla oyuncuları yedeğe
+    const newFieldedIds = new Set(lineupState.slots.filter(s => s !== null));
+    for (const id of oldPlayerIds) {
+      if (!newFieldedIds.has(id)) {
+        if (!lineupState.bench.includes(id)) lineupState.bench.push(id);
+      }
+    }
     drawPitch();
+    drawBench();
+    if (els.lineupSavedInfo) {
+      const filled = lineupState.slots.filter(s => s !== null).length;
+      els.lineupSavedInfo.textContent = `${filled}/11 dolduruldu`;
+    }
   }, { once: true });
 
   // Kaydet
