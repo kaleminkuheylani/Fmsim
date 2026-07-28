@@ -91,6 +91,7 @@ const els = {
   // page home
   btnPlayWeek: $('btn-play-week'),
   btnPlayLabel: $('btn-play-label'),
+  btnResumeMatch: $('btn-resume-match'),
   nextHome: $('next-home'),
   nextAway: $('next-away'),
   nextHomePos: $('next-home-pos'),
@@ -364,6 +365,15 @@ function renderHome() {
   if (!game) return;
   const wk = game.league.currentWeek + 1;
   els.wfWeek.textContent = wk;
+
+  // Maç varsa "Maça Dön" butonu göster
+  if (els.btnResumeMatch) {
+    if (match && match.minute < 90) {
+      els.btnResumeMatch.style.display = 'inline-flex';
+    } else {
+      els.btnResumeMatch.style.display = 'none';
+    }
+  }
 
   // Teklifler
   renderOffers();
@@ -1922,6 +1932,7 @@ function endSeason() {
 
 // === EVENTS ===
 els.btnPlayWeek.addEventListener('click', () => playWeek(false));
+els.btnResumeMatch?.addEventListener('click', () => navigate('/match'));
 els.btnReset.addEventListener('click', () => {
   if (confirm('Yeni sezon başlatılsın mı? Tüm ilerleme sıfırlanacak.')) {
     localStorage.removeItem(STORAGE_KEY);
