@@ -3,20 +3,22 @@
 //
 // Oyuncu "düşünür" (context-aware):
 //   1. Kale yakın ve açıksa + yetenek yeterliyse → ŞUT
-//   2. Önünde rakip var + arkadaşı daha iyi pozisyondaysa → PAS
-//   3. Kanattaysa + ceza sahasına yakınsa + crossing iyiyse → ORTA
-//   4. Gerideyse + defansif taktikteyse → GERİ PAS veya TUT
+//   2. Kanattaysa + ceza sahasına yakınsa + crossing iyiyse → ORTA
+//   3. PAS mi DRIBBLE mi? → PPO policy (RL eğitilmiş) veya rule-based fallback
+//   4. Gerideyse + defansif taktikteyse → TUT
 //   5. DEFAULT: DRIBLING (sür)
 //
 // "Zeka" = decisions + vision. Yüksek zeka:
 //   - Daha uzaktan şut çeker
 //   - Daha uzak rakibi görür (pas kararı)
 //   - Daha iyi pas hedefi seçer
-// Edge case'lerde (eşit koşullar) küçük bir randomness var — gerçek futbolda
-// oyuncu "şaşırabilir" veya "farklı seçebilir". Bu yüzden 1-2 yerde Math.random().
+//
+// RL Entegrasyonu: PPO policy (scripts/rl/ppo_model.json) "pas mı dribble mı"
+// kararını veriyor. PPO yüklü değilse rule-based shouldPass'e fallback.
 
 import { getEffective } from './calc.js';
 import { inAnyBox, inHomeBox, inAwayBox } from './state.js';
+import { ppoDecide, ppoForward, extractState } from './ppo_policy.js';
 
 // === YARDIMCI: nokta-segment mesafesi ===
 // p noktasının (px, py) ile (x1,y1)-(x2,y2) segmenti arasındaki en kısa mesafe
@@ -267,12 +269,24 @@ export function decideAction(player, match) {
   // 2) ŞUT — kale yakın ve açıksa
   if (shouldShoot(player, match)) return 'shoot';
 
-  // 3) PAS — sıkışmışsa ve arkadaşı iyi pozisyondaysa
-  if (shouldPass(player, match)) return pickPassType(player, match);
+  // 3) PAS mı DRIBBLE mı?
+  // a) shouldPass true ise (önümde rakip var + arkadaş daha iyi pozisyonda)
+  //    → PPO'ya sor: pas mı yoksa yine de dribble mı?
+  // b) PPO 'passShort'/'passLong' derse → pas
+  // c) PPO 'dribble' derse → dribble (sıkışmış olsa bile)
+  // d) PPO yoksa → rule-based pas (pickPassType)
+  if (shouldPass(player, match)) {
+    const ppoAction = ppoDecide(player, match);
+    if (ppoAction === 'passShort') return 'passShort';
+    if (ppoAction === 'passLong') return 'passLong';
+    if (ppoAction === 'dribble') return 'dribble';
+    // PPO yüklü değilse: rule-based pas
+    return pickPassType(player, match);
+  }
 
-  // 4) TUT / GERİ PAS — sadece çok geride + defansif taktik (sıkı)
+  // 4) TUT — sadece çok yorgun
   if (shouldHoldOrRecycle(player, match)) {
-    return 'hold'; // recycle kaldırıldı — oyuncular sürüşü tercih eder
+    return 'hold';
   }
 
   // 5) DEFAULT: DRIBLING (top sürmek) — oyuncular her zaman sürüşü tercih eder

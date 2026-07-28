@@ -18,6 +18,8 @@ Action: 0=dribble, 1=passShort, 2=passLong
 import numpy as np
 import time
 import sys
+import os
+import json
 
 np.random.seed(42)
 
@@ -464,6 +466,36 @@ if __name__ == '__main__':
     print(f"PPO gol oranı: {ppo_goal:.1%}")
     print(f"PPO action: dribble {actions_taken[0]/total_a:.1%}, "
           f"passShort {actions_taken[1]/total_a:.1%}, passLong {actions_taken[2]/total_a:.1%}")
+
+    # === Model Kaydet (Node.js entegrasyonu için) ===
+    out_path = os.path.join(os.path.dirname(__file__) or '.', 'ppo_model.json')
+    model_export = {
+        'W1': policy.W1.tolist(),
+        'b1': policy.b1.tolist(),
+        'W2': policy.W2.tolist(),
+        'b2': policy.b2.tolist(),
+        'Wv': policy.Wv.tolist(),
+        'bv': policy.bv.tolist(),
+        'meta': {
+            'state_dim': STATE_DIM,
+            'n_actions': N_ACTIONS,
+            'hidden': policy.W1.shape[0],
+            'state_features': [
+                'distance_to_goal',      # 0=yakın, 1=uzak
+                'opponents_ahead',        # 0=yok, 1=çok
+                'teammates_better_pos',   # 0=yok, 1=var
+                'stamina',                # 0=yorgun, 1=taze
+                'vision',                 # 0=kör, 1=iyi
+                'ball_progress',          # 0=kendi yarısı, 1=rakip yarısı
+                'dribble_rate',           # oyuncunun dribbling
+                'phase_pressure',         # 0=normal, 1=kontra
+            ],
+            'action_labels': ['dribble', 'passShort', 'passLong'],
+        }
+    }
+    with open(out_path, 'w') as f:
+        json.dump(model_export, f)
+    print(f"\nModel kaydedildi: {out_path}")
 
     # === Karşılaştırma ===
     print("\n=== KARŞILAŞTIRMA ===")
