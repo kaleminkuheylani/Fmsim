@@ -256,9 +256,21 @@ function updatePositions(match) {
           }
         }
       }
-      const lerp = p.live.currentStamina < 30 ? 0.08 : 0.3;
-      p.live.x += (targetX - p.live.x) * lerp;
-      p.live.y += (targetY - p.live.y) * lerp;
+      const speedBase = p.position === "GK" ? 0.6 : p.position === "DF" ? 0.9 : p.position === "OS" ? 1.1 : 1.3;
+      const urgency = distToBall < 15 ? 1.6 : distToBall < 25 ? 1.2 : distToBall < 40 ? 0.9 : 0.6;
+      const staminaFactor2 = (p.live.currentStamina || 100) < 30 ? 0.5 : 1;
+      const speed = speedBase * urgency * staminaFactor2;
+      const dx = targetX - p.live.x;
+      const dy = targetY - p.live.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.3) {
+        const step = Math.min(speed, dist);
+        p.live.x += dx / dist * step;
+        p.live.y += dy / dist * step;
+      } else {
+        p.live.x = targetX;
+        p.live.y = targetY;
+      }
     }
   }
 }

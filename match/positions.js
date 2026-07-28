@@ -211,10 +211,33 @@ export function updatePositions(match) {
         }
       }
 
-      // Yumuşak hareket (yorgunken yavaş)
-      const lerp = p.live.currentStamina < 30 ? 0.08 : 0.30;
-      p.live.x += (targetX - p.live.x) * lerp;
-      p.live.y += (targetY - p.live.y) * lerp;
+      // === HIZ BAZLI HAREKET (lerp yerine) ===
+      // Pozisyona göre taban hız
+      const speedBase = p.position === 'GK' ? 0.6
+                      : p.position === 'DF' ? 0.9
+                      : p.position === 'OS' ? 1.1
+                      : 1.3; // FV
+      // Topa uzaklığa göre urgency
+      const urgency = distToBall < 15 ? 1.6
+                    : distToBall < 25 ? 1.2
+                    : distToBall < 40 ? 0.9
+                    : 0.6; // uzak
+      // Yorgunken yavaşla
+      const staminaFactor = (p.live.currentStamina || 100) < 30 ? 0.5 : 1.0;
+      const speed = speedBase * urgency * staminaFactor;
+      // Hedefe doğru sabit hızla hareket
+      const dx = targetX - p.live.x;
+      const dy = targetY - p.live.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.3) {
+        const step = Math.min(speed, dist);
+        p.live.x += (dx / dist) * step;
+        p.live.y += (dy / dist) * step;
+      } else {
+        // Hedefe snap (lerp hedefe asla varmaz sorununu çözer)
+        p.live.x = targetX;
+        p.live.y = targetY;
+      }
     }
   }
 }
