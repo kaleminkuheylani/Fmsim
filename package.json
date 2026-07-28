@@ -6,10 +6,8 @@
   "description": "Narrative Spiker — Başkan modu futbol simülasyonu (client-side)",
   "scripts": {
     "start": "node server.js",
+    "dev": "node --watch server.js",
     "build": "esbuild site/js/entry.js --bundle --format=esm --outfile=site/js/match-engine.js --target=es2020"
-  },
-  "dependencies": {
-    "serve-handler": "^6.1.5"
   },
   "engines": {
     "node": "20.x"

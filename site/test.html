@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Match Engine — Test Ekranı</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://unpkg.com/lucide@1.22.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* === TEST PAGE — sadece bu sayfa için === */
+  body { background: #0a0e1a; color: #e5e7eb; }
+  .test-wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+  .panel { background: #141b2d; border: 1px solid #1f2937; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+
+  /* === SCOREBOARD === */
+  .scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 24px; }
+  .sb-team { display: flex; flex-direction: column; gap: 4px; }
+  .sb-team.home { text-align: right; }
+  .sb-team.away { text-align: left; }
+  .sb-name { font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+  .sb-form { font-size: 11px; color: #64748b; }
+  .sb-score { font-size: 56px; font-weight: 800; line-height: 1; color: #f59e0b; font-variant-numeric: tabular-nums; }
+  .sb-center { text-align: center; }
+  .sb-minute { font-size: 32px; font-weight: 700; color: #fff; }
+  .sb-minute-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px; }
+  .sb-status { font-size: 10px; color: #10b981; margin-top: 4px; font-weight: 600; }
+  .sb-status.paused { color: #ef4444; }
+
+  /* === STATS GRID === */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat-card { background: #0a0e1a; border-radius: 6px; padding: 10px; text-align: center; }
+  .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 18px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat-bar { display: flex; height: 4px; background: #1f2937; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .stat-bar > .home { background: #3b82f6; }
+  .stat-bar > .away { background: #ef4444; }
+
+  /* === MINI PITCH === */
+  .mini-pitch {
+    position: relative; width: 100%; aspect-ratio: 100/70;
+    background: linear-gradient(180deg, #166534, #14532d);
+    border-radius: 6px; overflow: hidden; border: 2px solid #fff;
+  }
+  .mini-pitch .center-circle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 30%; aspect-ratio: 1; border: 1px solid rgba(255,255,255,0.4); border-radius: 50%; }
+  .mini-pitch .center-line { position: absolute; top: 0; left: 50%; width: 1px; height: 100%; background: rgba(255,255,255,0.4); }
+  .mini-pitch .penalty { position: absolute; top: 50%; transform: translateY(-50%); width: 16%; aspect-ratio: 1.4/1; border: 1px solid rgba(255,255,255,0.4); }
+  .mini-pitch .penalty.left { left: 0; border-left: none; }
+  .mini-pitch .penalty.right { right: 0; border-right: none; }
+  .mini-pitch .goal { position: absolute; top: 50%; transform: translateY(-50%); width: 2%; height: 20%; background: rgba(255,255,255,0.3); }
+  .mini-pitch .goal.left { left: 0; }
+  .mini-pitch .goal.right { right: 0; }
+  .mini-pitch .ball {
+    position: absolute; width: 12px; height: 12px; background: #fbbf24; border: 2px solid #fff; border-radius: 50%;
+    transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+    transition: left 0.5s, top 0.5s;
+  }
+  .mini-pitch .ball-label { position: absolute; background: rgba(0,0,0,0.7); color: #fbbf24; font-size: 10px; padding: 2px 6px; border-radius: 3px; transform: translate(-50%, -180%); white-space: nowrap; }
+  .pitch-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #64748b; }
+
+  /* === LISTS === */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .event-list, .narrative-list { max-height: 320px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
+  .event-item i[data-lucide], .narrative-item i[data-lucide] { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; }
+  .event-item.goal i[data-lucide] { color: #10b981; }
+  .event-item.yellow_card i[data-lucide] { color: #f59e0b; }
+  .event-item.red_card i[data-lucide] { color: #ef4444; }
+  .event-item.injury i[data-lucide] { color: #f43f5e; }
+  .event-item.substitution i[data-lucide] { color: #3b82f6; }
+  .event-item.kickoff i[data-lucide] { color: #8b5cf6; }
+  .event-item { padding: 6px 8px; border-left: 3px solid #1f2937; margin-bottom: 4px; background: #0a0e1a; border-radius: 0 4px 4px 0; }
+  .event-item.goal { border-left-color: #10b981; }
+  .event-item.yellow_card { border-left-color: #f59e0b; }
+  .event-item.red_card { border-left-color: #ef4444; }
+  .event-item.injury { border-left-color: #f43f5e; }
+  .event-item.substitution { border-left-color: #3b82f6; }
+  .event-item.kickoff { border-left-color: #8b5cf6; }
+  .event-min { color: #f59e0b; font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .narrative-item { padding: 6px 8px; margin-bottom: 4px; background: #0a0e1a; border-radius: 4px; border-left: 2px solid #8b5cf6; font-style: italic; }
+
+  /* === CONTROLS === */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn { background: #1f2937; color: #e5e7eb; border: 1px solid #374151; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: #374151; border-color: #4b5563; }
+  .btn.primary { background: #f59e0b; color: #0a0e1a; border-color: #f59e0b; }
+  .btn.primary:hover { background: #fbbf24; }
+  .btn.success { background: #10b981; color: #0a0e1a; border-color: #10b981; }
+  .btn.danger { background: #ef4444; color: #fff; border-color: #ef4444; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn svg { width: 14px; height: 14px; }
+
+  /* === START FORM === */
+  .start-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .start-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+  .start-form input, .start-form select { background: #0a0e1a; border: 1px solid #1f2937; color: #e5e7eb; padding: 8px 10px; border-radius: 4px; font-size: 13px; }
+  .start-form input:focus, .start-form select:focus { outline: none; border-color: #f59e0b; }
+
+  .empty { color: #64748b; text-align: center; padding: 20px; font-size: 12px; }
+  .icon { width: 14px; height: 14px; display: inline-block; vertical-align: middle; }
+  .top-link { font-size: 11px; color: #64748b; text-decoration: none; }
+  .top-link:hover { color: #f59e0b; }
+
+  @media (max-width: 700px) {
+    .split { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .sb-score { font-size: 40px; }
+    .sb-minute { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="test-wrap">
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <div>
+      <a href="/" class="top-link">← Ana uygulamaya dön</a>
+    </div>
+    <div style="font-size:11px; color:#64748b;">
+      Match Engine Test Ekranı · server.js üzerinden /api/test/* rotaları
+    </div>
+  </div>
+
+  <!-- YENİ MAÇ FORMU -->
+  <div class="panel">
+    <h2 class="panel-title">Yeni Maç</h2>
+    <form id="start-form" class="start-form">
+      <label>
+        Ev sahibi
+        <input id="homeName" type="text" value="Galata Boğaz FK" />
+      </label>
+      <label>
+        Deplasman
+        <input id="awayName" type="text" value="Anadolu Kartalı SK" />
+      </label>
+      <label>
+        Ev formasyon
+        <select id="hForm">
+          <option value="442" selected>4-4-2</option>
+          <option value="433">4-3-3</option>
+          <option value="352">3-5-2</option>
+          <option value="451">4-5-1</option>
+        </select>
+      </label>
+      <label>
+        Dep formasyon
+        <select id="aForm">
+          <option value="442">4-4-2</option>
+          <option value="433" selected>4-3-3</option>
+          <option value="352">3-5-2</option>
+          <option value="451">4-5-1</option>
+        </select>
+      </label>
+      <div style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button type="submit" class="btn primary">
+          <i data-lucide="play"></i> Maçı Başlat
+        </button>
+        <button type="button" id="btn-reset" class="btn danger">
+          <i data-lucide="rotate-ccw"></i> Sıfırla
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- SKORBOARD -->
+  <div class="panel scoreboard">
+    <div class="sb-team home">
+      <div class="sb-name" id="d-home">—</div>
+      <div class="sb-form" id="d-home-form">—</div>
+      <div class="sb-score" id="d-home-score">0</div>
+    </div>
+    <div class="sb-center">
+      <div class="sb-minute"><span id="d-minute">0</span>'</div>
+      <div class="sb-minute-label">Dakika</div>
+      <div class="sb-status" id="d-status">Hazır</div>
+    </div>
+    <div class="sb-team away">
+      <div class="sb-name" id="d-away">—</div>
+      <div class="sb-form" id="d-away-form">—</div>
+      <div class="sb-score" id="d-away-score">0</div>
+    </div>
+  </div>
+
+  <!-- KONTROLLER -->
+  <div class="panel">
+    <h2 class="panel-title">Kontroller</h2>
+    <div class="controls">
+      <button id="btn-tick-1" class="btn">+1 dk</button>
+      <button id="btn-tick-5" class="btn">+5 dk</button>
+      <button id="btn-tick-10" class="btn">+10 dk</button>
+      <button id="btn-tick-45" class="btn">İlk Yarı</button>
+      <button id="btn-tick-90" class="btn primary">Maç Sonuna Kadar</button>
+      <div style="flex:1"></div>
+      <button id="btn-auto" class="btn success">
+        <i data-lucide="play"></i> <span id="auto-label">Otomatik Oynat</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- İSTATİSTİKLER -->
+  <div class="panel">
+    <h2 class="panel-title">İstatistikler</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Top Hakimiyeti</div>
+        <div class="stat-value"><span id="s-poss-h">50</span>% – <span id="s-poss-a">50</span>%</div>
+        <div class="stat-bar">
+          <div class="home" id="s-poss-h-bar" style="width:50%"></div>
+          <div class="away" id="s-poss-a-bar" style="width:50%"></div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Şut</div>
+        <div class="stat-value"><span id="s-shots-h">0</span> – <span id="s-shots-a">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">İsabetli Şut</div>
+        <div class="stat-value"><span id="s-sot-h">0</span> – <span id="s-sot-a">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Korner</div>
+        <div class="stat-value"><span id="s-corners-h">0</span> – <span id="s-corners-a">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Faul</div>
+        <div class="stat-value"><span id="s-fouls-h">0</span> – <span id="s-fouls-a">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sarı Kart</div>
+        <div class="stat-value"><span id="s-yellow-h">0</span> – <span id="s-yellow-a">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Kırmızı Kart</div>
+        <div class="stat-value"><span id="s-red-h">0</span> – <span id="s-red-a">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Momentum</div>
+        <div class="stat-value"><span id="s-momentum">50</span>% ev lehine</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MİNİ SAHA -->
+  <div class="panel">
+    <h2 class="panel-title">Saha Görünümü (100×70 grid)</h2>
+    <div class="mini-pitch" id="mini-pitch">
+      <div class="center-circle"></div>
+      <div class="center-line"></div>
+      <div class="penalty left"></div>
+      <div class="penalty right"></div>
+      <div class="goal left"></div>
+      <div class="goal right"></div>
+      <div class="ball" id="mini-ball" style="left:50%; top:50%">
+        <div class="ball-label" id="ball-label">orta saha</div>
+      </div>
+    </div>
+    <div class="pitch-meta">
+      <span>Top: <strong id="pitch-ball-side">—</strong> takımında</span>
+      <span>Taşıyan: <strong id="pitch-carrier">—</strong></span>
+      <span>Pozisyon: (<span id="pitch-x">50</span>, <span id="pitch-y">35</span>)</span>
+    </div>
+  </div>
+
+  <!-- OLAYLAR + NARRATİF -->
+  <div class="split">
+    <div class="panel">
+      <h2 class="panel-title">Olay Akışı</h2>
+      <div class="event-list" id="event-list">
+        <div class="empty">Maç başlatılmadı.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="panel-title">Spiker Anlatımı</h2>
+      <div class="narrative-list" id="narrative-list">
+        <div class="empty">Maç başlatılmadı.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  // ============================================================
+  // MATCH ENGINE TEST UI
+  // ============================================================
+  const $ = (id) => document.getElementById(id);
+  const state = { match: null, auto: false, autoTimer: null };
+
+  function eventClass(type) {
+    if (type === 'goal') return 'goal';
+    if (type?.includes('yellow')) return 'yellow_card';
+    if (type === 'red_card') return 'red_card';
+    if (type === 'injury') return 'injury';
+    if (type === 'substitution') return 'substitution';
+    if (type === 'kickoff') return 'kickoff';
+    if (type === 'red_second_yellow') return 'red_card';
+    return '';
+  }
+
+  function eventIcon(type) {
+    if (type === 'goal') return 'circle-dot';
+    if (type?.includes('yellow')) return 'square';
+    if (type === 'red_card' || type === 'red_second_yellow') return 'square';
+    if (type === 'injury') return 'alert-triangle';
+    if (type === 'substitution') return 'refresh-cw';
+    if (type === 'kickoff') return 'play';
+    if (type === 'foul') return 'alert-triangle';
+    if (type === 'turnover') return 'rotate-ccw';
+    if (type === 'pass_success') return 'check';
+    if (type === 'shoot') return 'target';
+    if (type === 'corner') return 'flag';
+    if (type === 'tackle_won') return 'zap';
+    return 'circle';
+  }
+
+  function ballZoneName(x) {
+    if (x < 16) return 'ev savunma';
+    if (x < 32) return 'ev ceza sahası çevresi';
+    if (x < 50) return 'ev orta saha';
+    if (x < 68) return 'dep orta saha';
+    if (x < 84) return 'dep ceza sahası çevresi';
+    return 'dep savunma';
+  }
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, opts);
+    return r.json();
+  }
+
+  async function startMatch(e) {
+    if (e) e.preventDefault();
+    stopAuto();
+    const homeName = $('homeName').value || 'Ev Sahibi';
+    const awayName = $('awayName').value || 'Deplasman';
+    const hForm = $('hForm').value;
+    const aForm = $('aForm').value;
+    const r = await api(`/api/test/start?homeName=${encodeURIComponent(homeName)}&awayName=${encodeURIComponent(awayName)}&hForm=${hForm}&aForm=${aForm}`);
+    if (!r.ok) { alert('Hata: ' + r.error); return; }
+    state.match = r.match;
+    renderAll(r);
+    // Açılış narratifi
+    if (r.opening) {
+      const list = $('narrative-list');
+      list.innerHTML = '';
+      for (const n of r.opening) list.innerHTML += narrativeItemHtml(n);
+    }
+    refreshIcons();
+  }
+
+  async function tick(count) {
+    if (!state.match || state.match.finished) return;
+    stopAuto();
+    const r = await api(`/api/test/tick?count=${count}`);
+    if (!r.ok) { alert('Hata: ' + r.error); return; }
+    state.match = r.match;
+    renderAll(r);
+    appendNew(r);
+  }
+
+  async function runTo(target) {
+    if (!state.match || state.match.finished) return;
+    stopAuto();
+    const r = await api(`/api/test/run?untilMinute=${target}`);
+    if (!r.ok) { alert('Hata: ' + r.error); return; }
+    state.match = r.match;
+    renderAll(r);
+    appendNew(r);
+  }
+
+  function appendNew(r) {
+    if (r.newEvents?.length) {
+      const list = $('event-list');
+      if (list.querySelector('.empty')) list.innerHTML = '';
+      for (const ev of r.newEvents) list.innerHTML = eventItemHtml(ev);
+      list.scrollTop = list.scrollHeight;
+    }
+    if (r.newNarrative?.length) {
+      const list = $('narrative-list');
+      if (list.querySelector('.empty')) list.innerHTML = '';
+      for (const n of r.newNarrative) list.innerHTML = narrativeItemHtml(n);
+      list.scrollTop = list.scrollHeight;
+    }
+  }
+
+  function eventItemHtml(ev) {
+    return `<div class="event-item ${eventClass(ev.type)}">
+      <span class="event-min">${ev.minute || 0}'</span>
+      <i data-lucide="${eventIcon(ev.type)}"></i>
+      <span>${escapeHtml(ev.text || ev.type)}</span>
+    </div>`;
+  }
+  function narrativeItemHtml(n) {
+    return `<div class="narrative-item">
+      <span class="event-min">${n.minute || 0}'</span>
+      <i data-lucide="mic"></i>
+      ${escapeHtml(n.text || '')}
+    </div>`;
+  }
+  function refreshIcons(root) {
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons({ attrs: { class: 'lucide' } });
+      // Scoped: lucide 1.22 doesn't accept a root, scans whole document. Acceptable for our test page size.
+    }
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderAll(r) {
+    const m = r.match;
+    if (!m) return;
+    $('d-home').textContent = m.home.name;
+    $('d-away').textContent = m.away.name;
+    $('d-home-form').textContent = `Formasyon ${m.home.formation}`;
+    $('d-away-form').textContent = `Formasyon ${m.away.formation}`;
+    $('d-home-score').textContent = m.home.score;
+    $('d-away-score').textContent = m.away.score;
+    $('d-minute').textContent = m.minute;
+
+    // status
+    const status = $('d-status');
+    if (m.finished) {
+      status.textContent = 'Maç Bitti';
+      status.classList.add('paused');
+    } else if (state.auto) {
+      status.textContent = '● Otomatik';
+      status.classList.remove('paused');
+    } else {
+      status.textContent = m.minute > 0 ? 'Duraklatıldı' : 'Hazır';
+      status.classList.toggle('paused', m.minute > 0);
+    }
+
+    // stats
+    const p = m.stats.possession;
+    $('s-poss-h').textContent = p.home;
+    $('s-poss-a').textContent = p.away;
+    $('s-poss-h-bar').style.width = p.home + '%';
+    $('s-poss-a-bar').style.width = p.away + '%';
+    $('s-shots-h').textContent = m.stats.shots.home;
+    $('s-shots-a').textContent = m.stats.shots.away;
+    $('s-sot-h').textContent = m.stats.shotsOnTarget.home;
+    $('s-sot-a').textContent = m.stats.shotsOnTarget.away;
+    $('s-corners-h').textContent = m.stats.corners.home;
+    $('s-corners-a').textContent = m.stats.corners.away;
+    $('s-fouls-h').textContent = m.stats.fouls.home;
+    $('s-fouls-a').textContent = m.stats.fouls.away;
+    $('s-yellow-h').textContent = m.home.yellow;
+    $('s-yellow-a').textContent = m.away.yellow;
+    $('s-red-h').textContent = m.home.red;
+    $('s-red-a').textContent = m.away.red;
+    $('s-momentum').textContent = m.momentum;
+
+    // ball
+    const ball = m.ball;
+    const ballEl = $('mini-ball');
+    ballEl.style.left = ball.x + '%';
+    ballEl.style.top = (ball.y / 70 * 100) + '%';
+    $('ball-label').textContent = `${ball.side === 'home' ? 'EV' : 'DEP'} · ${ballZoneName(ball.x)}`;
+    $('pitch-ball-side').textContent = ball.side === 'home' ? m.home.name : m.away.name;
+    $('pitch-carrier').textContent = ball.carrier || 'boşta';
+    $('pitch-x').textContent = ball.x;
+    $('pitch-y').textContent = ball.y;
+
+    // disable start button
+    $('btn-tick-90').disabled = m.finished;
+  }
+
+  // === AUTO PLAY ===
+  function startAuto() {
+    state.auto = true;
+    $('auto-label').textContent = 'Duraklat';
+    $('btn-auto').classList.remove('success');
+    $('btn-auto').classList.add('danger');
+    // İkonu duraklat ikonuyla değiştir
+    const autoIcon = document.querySelector('#btn-auto i[data-lucide]');
+    if (autoIcon) autoIcon.setAttribute('data-lucide', 'pause');
+    refreshIcons();
+    tickLoop();
+  }
+  function stopAuto() {
+    state.auto = false;
+    if (state.autoTimer) { clearTimeout(state.autoTimer); state.autoTimer = null; }
+    $('auto-label').textContent = 'Otomatik Oynat';
+    $('btn-auto').classList.remove('danger');
+    $('btn-auto').classList.add('success');
+    const autoIcon = document.querySelector('#btn-auto i[data-lucide]');
+    if (autoIcon) autoIcon.setAttribute('data-lucide', 'play');
+    refreshIcons();
+  }
+  async function tickLoop() {
+    if (!state.auto) return;
+    if (state.match?.finished) { stopAuto(); return; }
+    await tick(1);
+    if (state.auto) state.autoTimer = setTimeout(tickLoop, 700);
+  }
+
+  // === EVENT BINDINGS ===
+  // İlk lucide render (formdaki statik ikonlar)
+  refreshIcons();
+  $('start-form').addEventListener('submit', startMatch);
+  $('btn-reset').addEventListener('click', () => {
+    stopAuto();
+    state.match = null;
+    $('d-home').textContent = '—';
+    $('d-away').textContent = '—';
+    $('d-home-form').textContent = '—';
+    $('d-away-form').textContent = '—';
+    $('d-home-score').textContent = '0';
+    $('d-away-score').textContent = '0';
+    $('d-minute').textContent = '0';
+    $('d-status').textContent = 'Hazır';
+    $('event-list').innerHTML = '<div class="empty">Maç başlatılmadı.</div>';
+    $('narrative-list').innerHTML = '<div class="empty">Maç başlatılmadı.</div>';
+    // Reset stats
+    ['s-poss-h','s-poss-a','s-shots-h','s-shots-a','s-sot-h','s-sot-a','s-corners-h','s-corners-a','s-fouls-h','s-fouls-a','s-yellow-h','s-yellow-a','s-red-h','s-red-a'].forEach(id => $(id).textContent = '0');
+    $('s-poss-h-bar').style.width = '50%';
+    $('s-poss-a-bar').style.width = '50%';
+    $('s-momentum').textContent = '50';
+    refreshIcons();
+  });
+  $('btn-tick-1').addEventListener('click', () => tick(1));
+  $('btn-tick-5').addEventListener('click', () => tick(5));
+  $('btn-tick-10').addEventListener('click', () => tick(10));
+  $('btn-tick-45').addEventListener('click', () => {
+    if (state.match) runTo(45);
+  });
+  $('btn-tick-90').addEventListener('click', () => {
+    if (state.match) runTo(90);
+  });
+  $('btn-auto').addEventListener('click', () => {
+    if (!state.match) { alert('Önce maç başlat'); return; }
+    if (state.auto) stopAuto(); else startAuto();
+  });
+</script>
+
+</body>
+</html>
