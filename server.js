@@ -111,6 +111,13 @@ function snapshot(match) {
       carrier: getPlayerName(match, match.ballCarrier?.side, match.ballCarrier?.playerId),
       carrierId: match.ballCarrier?.playerId,
     },
+    // === ANİMASYON İÇİN: hedef pozisyonlar (server tick arası client interpole eder) ===
+    targets: {
+      ball: { x: match.ballPos.x, y: match.ballPos.y },
+      players: players.map(p => ({ id: p.id, x: p.live?.x ?? 50, y: p.live?.y ?? 35 })),
+    },
+    tickId: match.tickCount || 0,
+    serverTime: Date.now(),
     players,
     lastEvent,
     stats: {

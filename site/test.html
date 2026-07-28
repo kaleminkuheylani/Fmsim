@@ -490,6 +490,7 @@
   async function startMatch(e) {
     if (e) e.preventDefault();
     stopAuto();
+    if (rafId) cancelAnimationFrame(rafId);
     const homeName = $('homeName').value || 'Ev Sahibi';
     const awayName = $('awayName').value || 'Deplasman';
     const hForm = $('hForm').value;
@@ -497,37 +498,62 @@
     const r = await api(`/api/test/start?homeName=${encodeURIComponent(homeName)}&awayName=${encodeURIComponent(awayName)}&hForm=${hForm}&aForm=${aForm}`);
     if (!r.ok) { alert('Hata: ' + r.error); return; }
     state.match = r.match;
+    captureForInterpolation(r.match); // ilk state
     renderAll(r);
-    // Açılış narratifi
+    // 60fps rAF başlat
+    rafId = requestAnimationFrame(animationLoop);
     if (r.opening) {
       const list = $('narrative-list');
       list.innerHTML = '';
       for (const n of r.opening) list.innerHTML += narrativeItemHtml(n);
     }
     refreshIcons();
-    // UX: maç başladı izlenimi için otomatik pilot başlat (kullanıcı pause edebilir)
     setTimeout(() => startAuto(), 400);
   }
 
   async function tick(count) {
     if (!state.match || state.match.finished) return;
-    // NOT: stopAuto() burada çağrılmıyor — auto modunda pilot kendini durdurmamalı.
-    // Auto'yu durdurmak için: Duraklat butonu, maç sonu, veya reset.
     const r = await api(`/api/test/tick?count=${count}`);
     if (!r.ok) { alert('Hata: ' + r.error); return; }
     state.match = r.match;
+    // === ANİMASYON KAYDI: önceki interpolated state'i target yap, yeni state target olur ===
+    captureForInterpolation(r.match);
     renderAll(r);
     appendNew(r);
   }
 
   async function runTo(target) {
     if (!state.match || state.match.finished) return;
-    // stopAuto() çağrılmıyor (yukarıdaki tick not'una bak)
     const r = await api(`/api/test/run?untilMinute=${target}`);
     if (!r.ok) { alert('Hata: ' + r.error); return; }
     state.match = r.match;
+    captureForInterpolation(r.match);
     renderAll(r);
     appendNew(r);
+  }
+
+  // State interpolation için snapshot al
+  // stateInterpolated: o an ekranda olan pozisyonlar (şu anki render)
+  // stateTarget: yeni gelen server state pozisyonları (hedef)
+  function captureForInterpolation(match) {
+    // Eğer ilk frame ise interpolated ve target aynı olur (anlık)
+    if (!stateInterpolated) {
+      stateInterpolated = {
+        ball: { x: match.ball?.x ?? 50, y: match.ball?.y ?? 35 },
+        players: (match.players || []).map(p => ({ id: p.id, x: p.x ?? 50, y: p.y ?? 35 })),
+      };
+    } else {
+      // Önceki target artık "interpolated" oldu (şu anki ekranda olan)
+      stateInterpolated = stateTarget ? {
+        ball: { ...stateTarget.ball },
+        players: (stateTarget.players || []).map(p => ({ ...p })),
+      } : stateInterpolated;
+    }
+    stateTarget = {
+      ball: { x: match.ball?.x ?? 50, y: match.ball?.y ?? 35 },
+      players: (match.players || []).map(p => ({ id: p.id, x: p.x ?? 50, y: p.y ?? 35 })),
+    };
+    stateUpdateTime = performance.now();
   }
 
   function appendNew(r) {
@@ -793,11 +819,68 @@
     if (autoIcon) autoIcon.setAttribute('data-lucide', 'play');
     refreshIcons();
   }
+  // === AKAN GÖRÜNTÜ: 60fps rAF + server polling 80ms ===
+  // İki aşamalı render:
+  // 1. Server her 80ms'de yeni state gönderir (aksiyon çözünürlüğü)
+  // 2. Client her 16ms'de (60fps) interpole ederek render eder
+  let stateInterpolated = null; // son smooth-render edilen pozisyonlar
+  let stateTarget = null;       // son server'dan gelen hedef pozisyonlar
+  let stateUpdateTime = 0;      // stateTarget güncellendiği zaman
+  const TICK_DURATION = 240;    // ms — bir server tick arası interpolasyon süresi
+  let rafId = null;
+
   async function tickLoop() {
     if (!state.auto) return;
     if (state.match?.finished) { stopAuto(); return; }
     await tick(1);
-    if (state.auto) state.autoTimer = setTimeout(tickLoop, 700);
+    if (state.auto) state.autoTimer = setTimeout(tickLoop, 90);
+  }
+
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  // rAF döngüsü — 60fps smooth render
+  function animationLoop() {
+    if (!state.match) return;
+    if (stateTarget && stateInterpolated) {
+      const now = performance.now();
+      const dt = Math.max(0, Math.min(TICK_DURATION, now - stateUpdateTime));
+      const t = easeInOutQuad(dt / TICK_DURATION);
+      // Top
+      if (stateTarget.ball && stateInterpolated.ball) {
+        const bx = lerp(stateInterpolated.ball.x, stateTarget.ball.x, t);
+        const by = lerp(stateInterpolated.ball.y, stateTarget.ball.y, t);
+        renderBallAt(bx, by);
+      }
+      // Oyuncular
+      const targetById = new Map((stateTarget.players || []).map(p => [p.id, p]));
+      for (const interp of stateInterpolated.players) {
+        const target = targetById.get(interp.id);
+        if (!target) continue;
+        const x = lerp(interp.x, target.x, t);
+        const y = lerp(interp.y, target.y, t);
+        renderPlayerAt(interp.id, x, y, target);
+      }
+    }
+    rafId = requestAnimationFrame(animationLoop);
+  }
+
+  function renderBallAt(x, y) {
+    const el = document.querySelector('.lp-ball');
+    if (el) {
+      el.style.left = x + '%';
+      el.style.top = (y / 70 * 100) + '%';
+    }
+  }
+
+  function renderPlayerAt(id, x, y, targetPlayer) {
+    const el = playerEls.get(id);
+    if (!el) return;
+    el.style.left = x + '%';
+    el.style.top = (y / 70 * 100) + '%';
   }
 
   // === EVENT BINDINGS ===
