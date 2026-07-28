@@ -1397,6 +1397,10 @@ function renderMatchPage() {
   renderTacticInfo();
   renderSquadInMatch();
   renderMatchPitch();
+  // Animasyonu başlat (eğer maç devam ediyorsa)
+  if (match.minute < 90) {
+    startPitchAnimation();
+  }
 }
 
 function renderMatchPitch() {
@@ -1459,6 +1463,89 @@ function updatePitchBall() {
   const y = ball.y;
   els.mpBall.style.left = `${x}%`;
   els.mpBall.style.top = `${y}%`;
+}
+
+// === ANIMASYON DÖNGÜSÜ (requestAnimationFrame) ===
+// Mantıksal pozisyon her 100ms güncellenir, görsel her 16ms interpole olur
+let animFrameId = null;
+function startPitchAnimation() {
+  if (animFrameId) return;
+  const tickAnim = () => {
+    if (!match || match.minute >= 90) {
+      animFrameId = null;
+      return;
+    }
+    // Eğer pitch sayfada değilse dur
+    if (!els.matchPitch || els.matchPitch.offsetParent === null) {
+      animFrameId = null;
+      return;
+    }
+    // Görsel pozisyonları interpolate et (smooth)
+    animatePitchVisual();
+    animFrameId = requestAnimationFrame(tickAnim);
+  };
+  animFrameId = requestAnimationFrame(tickAnim);
+}
+
+function stopPitchAnimation() {
+  if (animFrameId) {
+    cancelAnimationFrame(animFrameId);
+    animFrameId = null;
+  }
+}
+
+// Her frame: mevcut görsel pozisyonları hedef pozisyonlara doğru interpole et
+const visualState = new Map(); // pid -> { x, y }
+const ballVisual = { x: 50, y: 35 };
+function animatePitchVisual() {
+  if (!els.mpPlayers || !match) return;
+  const smooth = 0.18; // her frame %18 hedefe yaklaş
+  // Oyuncular
+  for (const side of ['home', 'away']) {
+    const team = match[side];
+    for (const p of team.players) {
+      if (!p.onField) continue;
+      const dot = els.mpPlayers.querySelector(`.mp-player[data-pid="${p.id}"]`);
+      if (!dot) continue;
+      const targetX = (side === 'away' ? 100 - p.live.x : p.live.x);
+      const targetY = p.live.y;
+      let v = visualState.get(p.id);
+      if (!v) {
+        v = { x: targetX, y: targetY };
+        visualState.set(p.id, v);
+      } else {
+        v.x += (targetX - v.x) * smooth;
+        v.y += (targetY - v.y) * smooth;
+      }
+      dot.style.left = `${v.x}%`;
+      dot.style.top = `${v.y}%`;
+      // Top taşıyıcı
+      if (match.ballCarrier?.id === p.id) {
+        dot.classList.add('has-ball');
+      } else {
+        dot.classList.remove('has-ball');
+      }
+    }
+  }
+  // Top
+  if (els.mpBall && match.ballPos) {
+    const targetX = match.ballSide === 'away' ? 100 - match.ballPos.x : match.ballPos.x;
+    const targetY = match.ballPos.y;
+    // Pas gibi anlık ışınlanmalarda hızlı interpolasyon
+    const dist = Math.hypot(targetX - ballVisual.x, targetY - ballVisual.y);
+    const smoothBall = dist > 30 ? 0.6 : 0.25; // uzak hedefe hızlı, yakına yumuşak
+    ballVisual.x += (targetX - ballVisual.x) * smoothBall;
+    ballVisual.y += (targetY - ballVisual.y) * smoothBall;
+    els.mpBall.style.left = `${ballVisual.x}%`;
+    els.mpBall.style.top = `${ballVisual.y}%`;
+  }
+}
+
+// Görsel state'i sıfırla (maç başında)
+function resetPitchVisual() {
+  visualState.clear();
+  ballVisual.x = 50;
+  ballVisual.y = 35;
 }
 
 // === PITCH ÜZERİNDE OLAY FLASH ===
@@ -1845,6 +1932,7 @@ function launchMatch(user, opp, fix, skip) {
     els.mpPlayers.innerHTML = '';
   }
   if (els.mpOverlay) els.mpOverlay.innerHTML = '';
+  resetPitchVisual(); // görsel state sıfırla
   matchStartTime = Date.now();
   matchSecondsElapsed = 0;
 
@@ -1892,6 +1980,7 @@ function resetOnFieldForMatch(team) {
 function tick() {
   if (!match || match.minute >= 90) {
     stopTimer();
+    stopPitchAnimation();
     if (match) endUserMatch();
     return;
   }
@@ -1958,14 +2047,12 @@ function tick() {
   }
 
   renderScore();
-  // Pitch'i güncelle (her tick)
-  if (els.matchPitch && els.matchPitch.offsetParent !== null) {
-    updatePitchPositions();
-    updatePitchBall();
-  }
+  // Pitch animasyonu zaten requestAnimationFrame ile çalışıyor
+  // Her tick'te sadece mantıksal state'i güncelle (simulateMinute yaptı)
 
   if (match.minute >= 90) {
     stopTimer();
+    stopPitchAnimation();
     endUserMatch();
   }
 }
