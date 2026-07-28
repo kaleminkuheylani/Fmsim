@@ -37,7 +37,7 @@
   .stat-bar > .home { background: #3b82f6; }
   .stat-bar > .away { background: #ef4444; }
 
-  /* === MINI PITCH === */
+  /* === MINI PITCH (eski, korundu) === */
   .mini-pitch {
     position: relative; width: 100%; aspect-ratio: 100/70;
     background: linear-gradient(180deg, #166534, #14532d);
@@ -58,6 +58,120 @@
   }
   .mini-pitch .ball-label { position: absolute; background: rgba(0,0,0,0.7); color: #fbbf24; font-size: 10px; padding: 2px 6px; border-radius: 3px; transform: translate(-50%, -180%); white-space: nowrap; }
   .pitch-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #64748b; }
+
+  /* === LIVE PITCH (canlı, 22 oyuncu + top + eylem çizgileri) === */
+  .live-pitch {
+    position: relative; width: 100%; aspect-ratio: 100/70;
+    background:
+      repeating-linear-gradient(0deg, transparent 0, transparent 35px, rgba(255,255,255,0.04) 35px, rgba(255,255,255,0.04) 70px),
+      linear-gradient(180deg, #16a34a 0%, #15803d 100%);
+    border-radius: 6px; overflow: hidden; border: 2px solid #fff;
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.3);
+  }
+  .live-pitch .lp-mark { position: absolute; border-color: rgba(255,255,255,0.5); border-style: solid; }
+  .live-pitch .lp-center-circle {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 18%; aspect-ratio: 1; border-width: 1.5px; border-radius: 50%;
+  }
+  .live-pitch .lp-center-line { top: 0; left: 50%; width: 1.5px; height: 100%; border-width: 0; background: rgba(255,255,255,0.5); }
+  .live-pitch .lp-center-dot { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 6px; height: 6px; background: rgba(255,255,255,0.6); border-radius: 50%; }
+  .live-pitch .lp-penalty { top: 50%; transform: translateY(-50%); width: 16%; aspect-ratio: 1.4/1; border-width: 1.5px; }
+  .live-pitch .lp-penalty.left { left: 0; border-left: none; }
+  .live-pitch .lp-penalty.right { right: 0; border-right: none; }
+  .live-pitch .lp-six { top: 50%; transform: translateY(-50%); width: 6%; aspect-ratio: 0.6/1; border-width: 1.5px; }
+  .live-pitch .lp-six.left { left: 0; border-left: none; }
+  .live-pitch .lp-six.right { right: 0; border-right: none; }
+  .live-pitch .lp-goal { position: absolute; top: 50%; transform: translateY(-50%); width: 1.5%; height: 22%; background: rgba(255,255,255,0.4); }
+  .live-pitch .lp-goal.left { left: 0; }
+  .live-pitch .lp-goal.right { right: 0; }
+
+  /* Players */
+  .lp-player {
+    position: absolute; width: 18px; height: 18px;
+    border-radius: 50%; transform: translate(-50%, -50%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: #fff;
+    border: 1.5px solid rgba(255,255,255,0.8);
+    transition: left 0.6s ease, top 0.6s ease, opacity 0.3s;
+    z-index: 5;
+  }
+  .lp-player.home { background: #3b82f6; }
+  .lp-player.away { background: #ef4444; }
+  .lp-player.off { opacity: 0.25; background: #475569; }
+  .lp-player.injured { background: #f43f5e; }
+  .lp-player.red-card { background: #1f2937; border-color: #ef4444; }
+  .lp-player.carrier {
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.7), 0 0 12px rgba(251, 191, 36, 0.6);
+    z-index: 6;
+    animation: pulse-carrier 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse-carrier {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.7), 0 0 12px rgba(251, 191, 36, 0.6); }
+    50% { box-shadow: 0 0 0 6px rgba(251, 191, 36, 0.3), 0 0 16px rgba(251, 191, 36, 0.8); }
+  }
+  .lp-player .lp-name {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    font-size: 9px; background: rgba(0,0,0,0.8); color: #fff;
+    padding: 1px 4px; border-radius: 2px; white-space: nowrap;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .lp-player:hover .lp-name { opacity: 1; }
+  .lp-player.carrier .lp-name { opacity: 1; background: #f59e0b; color: #000; }
+
+  /* Ball */
+  .lp-ball {
+    position: absolute; width: 12px; height: 12px;
+    background: radial-gradient(circle at 30% 30%, #fef3c7, #fbbf24);
+    border: 1.5px solid #fff; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1), top 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  }
+  .lp-ball.goal-flash { animation: goal-flash 1s ease-out; }
+  @keyframes goal-flash {
+    0% { transform: translate(-50%, -50%) scale(1); background: #fbbf24; }
+    30% { transform: translate(-50%, -50%) scale(2.5); background: #10b981; }
+    100% { transform: translate(-50%, -50%) scale(1); background: #fbbf24; }
+  }
+
+  /* Action effects (SVG) */
+  .live-pitch svg.effects {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 4;
+  }
+  .live-pitch .effect-pass { stroke: #fbbf24; stroke-width: 2; fill: none; opacity: 0; }
+  .live-pitch .effect-pass.animate { animation: pass-anim 0.7s ease-out forwards; }
+  @keyframes pass-anim {
+    0% { opacity: 0; stroke-dasharray: 100; stroke-dashoffset: 100; }
+    30% { opacity: 0.9; }
+    100% { opacity: 0; stroke-dashoffset: 0; }
+  }
+  .live-pitch .effect-shot { stroke: #f43f5e; stroke-width: 2.5; fill: none; opacity: 0; }
+  .live-pitch .effect-shot.animate { animation: shot-anim 0.6s ease-out forwards; }
+  @keyframes shot-anim {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .live-pitch .effect-dribble { stroke: #8b5cf6; stroke-width: 1.5; fill: none; opacity: 0; stroke-dasharray: 4 3; }
+  .live-pitch .effect-dribble.animate { animation: dribble-anim 0.8s ease-out forwards; }
+  @keyframes dribble-anim {
+    0% { opacity: 0; }
+    20% { opacity: 0.8; }
+    100% { opacity: 0; }
+  }
+
+  .pitch-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: #64748b; flex-wrap: wrap; }
+  .pitch-legend .lg { display: flex; align-items: center; gap: 4px; }
+  .pitch-legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; }
+  .pitch-legend .dot.home { background: #3b82f6; }
+  .pitch-legend .dot.away { background: #ef4444; }
+  .pitch-legend .dot.ball { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
+  .pitch-legend .line { width: 16px; height: 2px; }
+  .pitch-legend .line.pass { background: #fbbf24; }
+  .pitch-legend .line.shot { background: #f43f5e; }
+  .pitch-legend .line.dribble { background: #8b5cf6; background: repeating-linear-gradient(90deg, #8b5cf6 0 4px, transparent 4px 7px); }
 
   /* === LISTS === */
   .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -241,9 +355,42 @@
     </div>
   </div>
 
-  <!-- MİNİ SAHA -->
+  <!-- CANLI SAHA (22 oyuncu + top + eylem efektleri) -->
   <div class="panel">
-    <h2 class="panel-title">Saha Görünümü (100×70 grid)</h2>
+    <h2 class="panel-title">Canlı Saha — 22 Oyuncu + Top + Eylemler</h2>
+    <div class="live-pitch" id="live-pitch">
+      <div class="lp-mark lp-center-circle"></div>
+      <div class="lp-mark lp-center-line"></div>
+      <div class="lp-center-dot"></div>
+      <div class="lp-mark lp-penalty left"></div>
+      <div class="lp-mark lp-penalty right"></div>
+      <div class="lp-mark lp-six left"></div>
+      <div class="lp-mark lp-six right"></div>
+      <div class="lp-goal left"></div>
+      <div class="lp-goal right"></div>
+      <svg class="effects" id="lp-effects" viewBox="0 0 100 70" preserveAspectRatio="none"></svg>
+      <div class="lp-ball" id="lp-ball" style="left:50%; top:50%"></div>
+      <div id="lp-players"></div>
+    </div>
+    <div class="pitch-legend">
+      <div class="lg"><span class="dot home"></span> Ev sahibi (11)</div>
+      <div class="lg"><span class="dot away"></span> Deplasman (11)</div>
+      <div class="lg"><span class="dot ball"></span> Top</div>
+      <div class="lg"><span class="line pass"></span> Pas</div>
+      <div class="lg"><span class="line shot"></span> Şut</div>
+      <div class="lg"><span class="line dribble"></span> Dribling</div>
+    </div>
+    <div class="pitch-meta">
+      <span>Top: <strong id="pitch-ball-side">—</strong> takımında</span>
+      <span>Taşıyan: <strong id="pitch-carrier">—</strong></span>
+      <span>Pozisyon: (<span id="pitch-x">50</span>, <span id="pitch-y">35</span>)</span>
+      <span>Son eylem: <strong id="pitch-last-action">—</strong></span>
+    </div>
+  </div>
+
+  <!-- ESKİ MİNİ SAHA (referans, küçük) -->
+  <div class="panel" style="display:none">
+    <h2 class="panel-title">Eski Mini Saha</h2>
     <div class="mini-pitch" id="mini-pitch">
       <div class="center-circle"></div>
       <div class="center-line"></div>
@@ -254,11 +401,6 @@
       <div class="ball" id="mini-ball" style="left:50%; top:50%">
         <div class="ball-label" id="ball-label">orta saha</div>
       </div>
-    </div>
-    <div class="pitch-meta">
-      <span>Top: <strong id="pitch-ball-side">—</strong> takımında</span>
-      <span>Taşıyan: <strong id="pitch-carrier">—</strong></span>
-      <span>Pozisyon: (<span id="pitch-x">50</span>, <span id="pitch-y">35</span>)</span>
     </div>
   </div>
 
@@ -372,15 +514,19 @@
     if (r.newEvents?.length) {
       const list = $('event-list');
       if (list.querySelector('.empty')) list.innerHTML = '';
-      for (const ev of r.newEvents) list.innerHTML = eventItemHtml(ev);
+      for (const ev of r.newEvents) list.innerHTML += eventItemHtml(ev);
       list.scrollTop = list.scrollHeight;
+      // Sahada eylem efektlerini çiz
+      const _p = r.match?.players || [];
+      for (const ev of r.newEvents) { drawActionEffect(ev, _p); }
     }
     if (r.newNarrative?.length) {
       const list = $('narrative-list');
       if (list.querySelector('.empty')) list.innerHTML = '';
-      for (const n of r.newNarrative) list.innerHTML = narrativeItemHtml(n);
+      for (const n of r.newNarrative) list.innerHTML += narrativeItemHtml(n);
       list.scrollTop = list.scrollHeight;
     }
+    refreshIcons();
   }
 
   function eventItemHtml(ev) {
@@ -453,17 +599,131 @@
 
     // ball
     const ball = m.ball;
-    const ballEl = $('mini-ball');
+    const ballEl = $('lp-ball');
     ballEl.style.left = ball.x + '%';
     ballEl.style.top = (ball.y / 70 * 100) + '%';
-    $('ball-label').textContent = `${ball.side === 'home' ? 'EV' : 'DEP'} · ${ballZoneName(ball.x)}`;
     $('pitch-ball-side').textContent = ball.side === 'home' ? m.home.name : m.away.name;
     $('pitch-carrier').textContent = ball.carrier || 'boşta';
     $('pitch-x').textContent = ball.x;
     $('pitch-y').textContent = ball.y;
 
+    // 22 oyuncu render
+    renderPitch(m);
+
+    // Son eylem
+    if (m.lastEvent) {
+      $('pitch-last-action').textContent = `${m.lastEvent.type} · ${(m.lastEvent.text || '').slice(0, 50)}`;
+    }
+
     // disable start button
     $('btn-tick-90').disabled = m.finished;
+  }
+
+  // === PITCH (22 oyuncu) ===
+  // İlk çağrıda div'leri oluştur, sonrakilerde sadece position güncelle
+  const playerEls = new Map();
+  function renderPitch(m) {
+    const container = $('lp-players');
+    const players = m.players || [];
+
+    // Yeni oyuncular için div oluştur
+    if (playerEls.size === 0) {
+      for (const p of players) {
+        const div = document.createElement('div');
+        div.className = `lp-player ${p.side}`;
+        div.id = `lp-${p.id}`;
+        // Forma numarası: pozisyona göre (GK=1, DF=2-5, OS=6-9, FV=10-11)
+        const numMap = { GK: 1, DF: 2, OS: 6, FV: 10 };
+        const numOffset = p.side === 'home' ? 0 : 0;
+        const samePos = players.filter(x => x.side === p.side && x.position === p.position).indexOf(p);
+        const num = numMap[p.position] + samePos;
+        div.textContent = num;
+        // İsim etiketi (hover)
+        const name = document.createElement('div');
+        name.className = 'lp-name';
+        name.textContent = p.name;
+        div.appendChild(name);
+        container.appendChild(div);
+        playerEls.set(p.id, div);
+      }
+    }
+
+    // Pozisyon ve class güncelle
+    const carrierId = m.ball.carrierId;
+    for (const p of players) {
+      const el = playerEls.get(p.id);
+      if (!el) continue;
+      el.style.left = p.x + '%';
+      el.style.top = (p.y / 70 * 100) + '%';
+
+      // Class'lar
+      el.classList.remove('carrier', 'off', 'injured', 'red-card');
+      if (carrierId && p.id === carrierId) el.classList.add('carrier');
+      if (!p.onField) el.classList.add('off');
+      if (p.injured) el.classList.add('injured');
+      if (p.redCard) el.classList.add('red-card');
+    }
+  }
+
+  // === EYLEM EFEKTLERİ (pas, şut, dribling çizgileri) ===
+  function drawActionEffect(ev, players) {
+    const svg = $('lp-effects');
+    if (!svg || !ev) return;
+    // Sadece anlamlı aksiyonları çiz
+    const drawable = ['pass_success', 'goal', 'dribble_success', 'cross_success', 'out_of_play'];
+    if (!drawable.includes(ev.type)) return;
+
+    // Oyuncunun pozisyonunu bul
+    const findPlayer = (id) => players.find(p => p.id === id);
+    let fromX, fromY, toX, toY, className;
+    const actor = findPlayer(ev.actor);
+
+    if (ev.type === 'pass_success' || ev.type === 'cross_success') {
+      if (!actor) return;
+      fromX = actor.x;
+      fromY = actor.y;
+      const target = findPlayer(ev.target);
+      if (!target) return;
+      toX = target.x;
+      toY = target.y;
+      className = 'effect-pass';
+    } else if (ev.type === 'goal') {
+      if (!actor) return;
+      fromX = actor.x;
+      fromY = actor.y;
+      // Hedef kale (ters taraf)
+      toX = ev.side === 'home' ? 100 : 0;
+      toY = 35;
+      className = 'effect-shot';
+      // Topa goal flash animasyonu
+      const ball = $('lp-ball');
+      ball.classList.add('goal-flash');
+      setTimeout(() => ball.classList.remove('goal-flash'), 1000);
+    } else if (ev.type === 'dribble_success') {
+      if (!actor) return;
+      // Kısa bir ok yönü (rastgele 5m)
+      fromX = actor.x;
+      fromY = actor.y;
+      const angle = ev.side === 'home' ? 0 : Math.PI;
+      toX = fromX + Math.cos(angle) * 8;
+      toY = fromY + Math.sin(angle) * 4;
+      className = 'effect-dribble';
+    } else {
+      return;
+    }
+
+    // SVG line çiz
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', fromX);
+    line.setAttribute('y1', fromY);
+    line.setAttribute('x2', toX);
+    line.setAttribute('y2', toY);
+    line.setAttribute('class', className);
+    svg.appendChild(line);
+    // Animasyonu tetikle (DOM'a eklendikten sonra)
+    requestAnimationFrame(() => line.classList.add('animate'));
+    // Temizle
+    setTimeout(() => line.remove(), 1200);
   }
 
   // === AUTO PLAY ===
@@ -517,6 +777,10 @@
     $('s-poss-h-bar').style.width = '50%';
     $('s-poss-a-bar').style.width = '50%';
     $('s-momentum').textContent = '50';
+    // Pitch'i temizle
+    $('lp-players').innerHTML = '';
+    $('lp-effects').innerHTML = '';
+    playerEls.clear();
     refreshIcons();
   });
   $('btn-tick-1').addEventListener('click', () => tick(1));

@@ -48,6 +48,46 @@ function calcPossession(match) {
 
 function snapshot(match) {
   if (!match) return null;
+
+  // Oyuncu listesi (saha + yedek ayrımı)
+  const players = [];
+  for (const side of ['home', 'away']) {
+    for (const p of match[side].players) {
+      players.push({
+        id: p.id,
+        name: p.name,
+        side,
+        position: p.position,
+        onField: !!p.onField,
+        x: p.live?.x ?? 50,
+        y: p.live?.y ?? 35,
+        stamina: p.live?.currentStamina ?? 100,
+        injured: !!p.live?.injured,
+        redCard: !!p.live?.redCard,
+        yellowCards: p.live?.yellowCards ?? 0,
+      });
+    }
+  }
+
+  // Son olay (aksiyon görselleştirmesi için)
+  let lastEvent = null;
+  if (match.events && match.events.length > 0) {
+    const ev = match.events[match.events.length - 1];
+    lastEvent = {
+      minute: ev.minute,
+      type: ev.type,
+      actor: ev.actor,
+      target: ev.target,
+      fromX: ev.fromX ?? ev.x,
+      fromY: ev.fromY ?? ev.y,
+      toX: ev.toX,
+      toY: ev.toY,
+      x: ev.x,
+      y: ev.y,
+      text: ev.text,
+    };
+  }
+
   return {
     minute: match.minute,
     home: {
@@ -69,7 +109,10 @@ function snapshot(match) {
       y: Math.round(match.ballPos.y * 10) / 10,
       side: match.ballSide,
       carrier: getPlayerName(match, match.ballCarrier?.side, match.ballCarrier?.playerId),
+      carrierId: match.ballCarrier?.playerId,
     },
+    players,
+    lastEvent,
     stats: {
       possession: calcPossession(match),
       shots: { ...match.stats.shots },
