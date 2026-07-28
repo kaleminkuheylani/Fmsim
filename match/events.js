@@ -36,23 +36,61 @@ export function resolveAction(match, carrier, action, target) {
   }
 }
 
+// === PAS STİLLERİ ===
+// Gerçek futbolda pas çeşitliliği: yön + şiddet + yer/hava
+const PASS_STYLES = {
+  // Standart yer pasları
+  short_ground: { difficultyMult: 0.8, marginMod: +8,  progress: 2.5, speed: 0.7, label: 'yerden' },
+  short_lofted: { difficultyMult: 1.2, marginMod: -8,  progress: 2.0, speed: 0.5, label: 'havadan' },
+
+  // Uzun paslar
+  long_ground:  { difficultyMult: 1.4, marginMod: -12, progress: 5.5, speed: 1.5, label: 'sert uzun' },
+  long_lofted:  { difficultyMult: 1.2, marginMod: -10, progress: 5.0, speed: 0.9, label: 'swing' },
+
+  // Özel paslar
+  through_ball: { difficultyMult: 1.7, marginMod: -18, progress: 8.0, speed: 1.4, label: 'ara pas' },
+  cutback:      { difficultyMult: 1.0, marginMod: -5,  progress: 1.0, speed: 0.6, label: 'cutback' }, // geri
+};
+
 // === PAS ===
-function resolvePass(match, carrier, type, target) {
+function resolvePass(match, carrier, type, target, passStyleOverride) {
   const side = match.ballSide;
   if (!target) return fail(match, 'pasHedefiYok');
 
   const targetPlayer = findPlayer(match, target.side, target.playerId);
   if (!targetPlayer) return fail(match, 'pasHedefiYok');
 
-  // Pas zorluğu: mesafe + rakip baskısı (daha düşük — gerçekçi futbolda pas isabeti yüksek)
-  const distance = target.distance;
-  let difficulty = 35;
-  if (type === 'short') {
-    difficulty = 28 + distance * 0.4;
-  } else {
-    difficulty = 40 + distance * 0.6;
+  // Stil: target.passStyle varsa onu kullan (decision.js'ten gelir)
+  const passStyle = passStyleOverride || target.passStyle || (type === 'long' ? 'long_ground' : 'short_ground');
+  const style = PASS_STYLES[passStyle] || PASS_STYLES.short_ground;
+
+  // === YÖN HESABI ===
+  // Hedefin ball'a göre X farkı
+  const dx = targetPlayer.live.x - match.ballPos.x;
+  const dy = targetPlayer.live.y - match.ballPos.y;
+  // side'e göre "ileri" yön: home için +, away için -
+  const forwardSign = side === 'home' ? 1 : -1;
+  // Yön: ileri (+) / geri (-) / yan (0)
+  const directionType = (dx * forwardSign) > 5 ? 'forward'
+                       : (dx * forwardSign) < -5 ? 'backward'
+                       : 'lateral';
+
+  // cutback her zaman backward, through_ball her zaman forward
+  if (passStyle === 'cutback' && directionType !== 'backward') {
+    // backward olmaya zorla
   }
-  // Rakip oyuncular araya girebilir (daha az etki)
+  if (passStyle === 'through_ball' && directionType !== 'forward') {
+    return fail(match, 'throughBallYonYanlis');
+  }
+
+  // Pas zorluğu: mesafe + rakip baskısı
+  const distance = target.distance;
+  let difficulty = type === 'short' ? 28 + distance * 0.4
+                                : 40 + distance * 0.6;
+  // Stil zorluk çarpanı
+  difficulty *= style.difficultyMult;
+
+  // Rakip oyuncular araya girebilir
   const opp = side === 'home' ? match.away : match.home;
   const interceptors = opp.players.filter(p =>
     p.onField && p.position !== 'GK' &&
@@ -60,19 +98,19 @@ function resolvePass(match, carrier, type, target) {
   );
   difficulty += interceptors.length * 2;
 
-  // Asinalık bonusu: yüksek uyum → pas isabeti artar (difficulty azalır)
+  // Asinalık bonusu
   const affinityBonus = getAffinityBonus(carrier, targetPlayer);
   if (affinityBonus > 0) difficulty -= affinityBonus;
 
-  // Pas yetenek kontrolü
-  const passCheck = skillCheck(carrier, type === 'long' ? 'passing' : 'passing', difficulty, {
+  // === PAS YETENEK KONTROLÜ ===
+  // Stil margin modifier: short_ground kolay, through_ball zor
+  const passCheck = skillCheck(carrier, 'passing', difficulty - style.marginMod, {
     action: type === 'long' ? 'longPass' : 'passShort',
     inBox: inAnyBox(match.ballPos.x, match.ballPos.y),
   });
 
-  // Araya girme şansı (her interceptor için)
+  // Araya girme şansı
   if (!passCheck.success) {
-    // En yakın interceptor topu kesebilir
     const closest = interceptors.sort((a, b) =>
       Math.hypot(a.live.x - match.ballPos.x, a.live.y - match.ballPos.y) -
       Math.hypot(b.live.x - match.ballPos.x, b.live.y - match.ballPos.y)
@@ -83,11 +121,13 @@ function resolvePass(match, carrier, type, target) {
         return intercept(match, carrier, closest, 'pas_kesildi');
       }
     }
-    // Araya giremezse pas auta gider → top karşı takıma
     return outOfPlay(match, 'pas_oturmadi', 'away', { actor: carrier.id });
   }
 
-  // Başarılı pas
+  // === BAŞARILI PAS ===
+  // Şiddet (power): passing yetenek + stamina → 0-100
+  const power = Math.min(100, (passCheck.skill * 0.7) + ((carrier.live?.currentStamina ?? 80) * 0.3));
+
   const events = [{
     minute: match.minute,
     type: 'pass_success',
@@ -95,22 +135,42 @@ function resolvePass(match, carrier, type, target) {
     actor: carrier.id,
     target: targetPlayer.id,
     distance,
+    passStyle,           // ← yeni: stil
+    direction: directionType, // ← yeni: yön
+    power: Math.round(power),  // ← yeni: şiddet
+    speed: style.speed,        // ← yeni: top hızı
     x: match.ballPos.x,
     y: match.ballPos.y,
-    text: `${match.minute}' ${carrier.name} → ${targetPlayer.name} (${Math.round(distance)}m)`,
+    text: `${match.minute}' ${carrier.name} → ${targetPlayer.name} ${style.label} (${Math.round(distance)}m${directionType === 'forward' ? ' ↑' : directionType === 'backward' ? ' ↓' : ' →'})`,
   }];
 
-  // === ASİNALIK: pas atan-alıcı arası +0.5 (hafif) ===
+  // Asinalık
   bumpAffinity(carrier, targetPlayer, 0.5);
 
-  // Topu hedefe taşı (ilerleme bonusu)
-  const dirSign = side === 'home' ? 1 : -1;
-  const progressBoost = type === 'long' ? 5 : 2.5;
+  // === TOP YENİ POZİSYON ===
+  // İlerleme: stil + yön
+  let progressBoost = style.progress;
+  if (directionType === 'backward') progressBoost *= 0.4; // geri pas az ilerler
+  if (directionType === 'lateral') progressBoost *= 0.7;  // yan pas orta
+
+  // through_ball → top alıcının önüne düşer (ileride)
+  let targetX = targetPlayer.live.x;
+  if (passStyle === 'through_ball') {
+    targetX = targetPlayer.live.x + forwardSign * 4; // alıcının 4m önü
+  }
+  if (passStyle === 'cutback') {
+    targetX = targetPlayer.live.x - forwardSign * 2; // alıcının 2m gerisi
+  }
+
   const newBall = {
-    x: Math.max(0, Math.min(100, targetPlayer.live.x + dirSign * progressBoost)),
-    y: targetPlayer.live.y,
+    x: Math.max(0, Math.min(100, targetX + forwardSign * progressBoost)),
+    y: targetPlayer.live.y + (passStyle === 'short_lofted' || passStyle === 'long_lofted'
+      ? (Math.random() - 0.5) * 2  // hava: y sapması biraz
+      : 0),
   };
-  carrier.live.extraEffort = 0.05; // pas eforu
+  carrier.live.extraEffort = passStyle === 'long_ground' ? 0.10
+                          : passStyle === 'long_lofted' ? 0.08
+                          : 0.05;
 
   // İstatistik
   match.stats.passesAttempted[side]++;
@@ -119,11 +179,17 @@ function resolvePass(match, carrier, type, target) {
   carrier.live.passesCompleted++;
   targetPlayer.live.passesAttempted++;
 
+  // Pas stili istatistiği (debug/görsel)
+  if (!match.stats.passStyles) match.stats.passStyles = { home: {}, away: {} };
+  if (!match.stats.passStyles[side][passStyle]) match.stats.passStyles[side][passStyle] = 0;
+  match.stats.passStyles[side][passStyle]++;
+
   return {
     ok: true,
     events,
     newBall,
     newCarrier: { side, playerId: targetPlayer.id },
+    passStyle,
   };
 }
 

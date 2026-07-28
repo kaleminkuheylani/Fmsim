@@ -177,7 +177,7 @@ function simulateAction(match) {
     target = pickPassTarget(carrier, match, action === 'passLong' ? 'long' : 'short');
   }
 
-  // Aksiyonu çöz
+  // Aksiyonu çöz (target.passStyle resolvePass tarafından okunur)
   const result = resolveAction(match, carrier, action, target);
 
   // === SET-PIECE kontrolü: taç / kale vuruşu / out-of-play sonrası oyuncular formasyona döner ===

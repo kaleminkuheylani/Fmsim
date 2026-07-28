@@ -396,9 +396,53 @@ export function pickPassTarget(carrier, match, type = 'short') {
   let r = Math.random() * total;
   for (const c of top) {
     r -= Math.max(0.05, c.score);
-    if (r <= 0) return { side, playerId: c.target.id, distance: c.distance };
+    if (r <= 0) {
+      // === PAS STİLİ HESAPLA (yeni) ===
+      const passStyle = pickPassStyle(carrier, match, c.target, type);
+      return { side, playerId: c.target.id, distance: c.distance, passStyle };
+    }
   }
-  return { side, playerId: top[0].target.id, distance: top[0].target.distance };
+  const lastStyle = pickPassStyle(carrier, match, top[0].target, type);
+  return { side, playerId: top[0].target.id, distance: top[0].target.distance, passStyle: lastStyle };
+}
+
+// === PAS STİLİ SEÇİMİ ===
+// Yön + mesafe + duruma göre stil belirle
+function pickPassStyle(carrier, match, target, type) {
+  const side = match.ballSide;
+  const ball = match.ballPos;
+  const goalX = side === 'home' ? 100 : 0;
+  const forwardSign = side === 'home' ? 1 : -1;
+  const dx = target.live.x - ball.x;
+  const dist = Math.hypot(target.live.x - ball.x, target.live.y - ball.y);
+  const directionType = (dx * forwardSign) > 5 ? 'forward'
+                       : (dx * forwardSign) < -5 ? 'backward'
+                       : 'lateral';
+
+  // inBox + backward → cutback (ceza sahası içi geri pas)
+  const inBox = inAnyBox(ball.x, ball.y);
+  if (inBox && directionType === 'backward' && dist < 12) return 'cutback';
+
+  // Short pas
+  if (type === 'short') {
+    // İleri + tehlikeli bölge → through_ball (nadir ama değerli)
+    const distToGoal = Math.hypot(target.live.x - goalX, target.live.y - 35);
+    if (directionType === 'forward' && distToGoal < 25 && Math.random() < 0.15) {
+      return 'through_ball';
+    }
+    // Yumuşak hava (rastgele %15)
+    if (Math.random() < 0.15) return 'short_lofted';
+    return 'short_ground';
+  }
+
+  // Long pas
+  if (type === 'long') {
+    // İleri + uzak → swing (havadan)
+    if (directionType === 'forward' && Math.random() < 0.4) return 'long_lofted';
+    return 'long_ground';
+  }
+
+  return type === 'short' ? 'short_ground' : 'long_ground';
 }
 
 // === ESKİ API UYUMLULUĞU ===
