@@ -985,3 +985,156 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
   font-size: 13px;
 }
 .ph-train-row .btn { white-space: nowrap; }
+
+/* === TAKTİK TAHTAYI === */
+.lineup-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .lineup-layout { grid-template-columns: 1fr; }
+}
+.formation-select {
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lineup-pitch-wrap {
+  background: var(--bg-1);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+.lineup-pitch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 7 / 10;
+  background:
+    linear-gradient(180deg,
+      #2d6a4f 0%, #2d6a4f 8%,
+      #40916c 8%, #40916c 92%,
+      #2d6a4f 92%, #2d6a4f 100%);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.lineup-pitch::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,0.3);
+  transform: translateX(-50%);
+}
+.lineup-pitch::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70px;
+  height: 70px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.lp-slot {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  z-index: 2;
+}
+.lp-slot.dragover {
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+}
+.lp-slot.dragging { opacity: 0.4; }
+.lp-player-chip {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-1);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  position: relative;
+  padding: 2px;
+  text-align: center;
+  line-height: 1.1;
+  cursor: grab;
+}
+.lp-player-chip.GK { border-color: #f59e0b; background: rgba(245,158,11,0.15); }
+.lp-player-chip.DF { border-color: #3b82f6; background: rgba(59,130,246,0.15); }
+.lp-player-chip.OS { border-color: #10b981; background: rgba(16,185,129,0.15); }
+.lp-player-chip.FV { border-color: #ef4444; background: rgba(239,68,68,0.15); }
+.lp-player-chip .lpp-name {
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52px;
+}
+.lp-player-chip .lpp-pos {
+  font-size: 8px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+.lp-empty {
+  width: 50px;
+  height: 50px;
+  border: 2px dashed rgba(255,255,255,0.4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.5);
+  font-size: 18px;
+  font-weight: 700;
+}
+.lp-slot.GK .lp-empty { border-color: rgba(245,158,11,0.5); color: rgba(245,158,11,0.6); }
+.lp-slot.DF .lp-empty { border-color: rgba(59,130,246,0.5); color: rgba(59,130,246,0.6); }
+.lp-slot.OS .lp-empty { border-color: rgba(16,185,129,0.5); color: rgba(16,185,129,0.6); }
+.lp-slot.FV .lp-empty { border-color: rgba(239,68,68,0.5); color: rgba(239,68,68,0.6); }
+
+.lineup-side { display: flex; flex-direction: column; gap: 12px; }
+.bench-list { display: flex; flex-direction: column; gap: 4px; max-height: 380px; overflow-y: auto; }
+.bench-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: grab;
+}
+.bench-item.GK { border-left: 3px solid #f59e0b; }
+.bench-item.DF { border-left: 3px solid #3b82f6; }
+.bench-item.OS { border-left: 3px solid #10b981; }
+.bench-item.FV { border-left: 3px solid #ef4444; }
+.bench-item .bi-pos {
+  font-size: 10px; font-weight: 700; background: var(--panel-2);
+  padding: 2px 5px; border-radius: 2px; min-width: 28px; text-align: center;
+}
+.bench-item .bi-name { flex: 1; }
+.bench-item .bi-rating { color: var(--accent); font-weight: 700; font-size: 11px; }
+.lineup-actions { display: flex; gap: 6px; }
+.lineup-actions .btn { flex: 1; }
+#lineup-saved-info { font-size: 11px; margin-left: 8px; }

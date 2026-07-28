@@ -71,6 +71,10 @@
       <i data-lucide="trending-up"></i>
       <span>Gelişim</span>
     </a>
+    <a href="#/lineup" data-route="/lineup" class="nav-item">
+      <i data-lucide="layout-grid"></i>
+      <span>Taktik</span>
+    </a>
     <div class="nav-divider"></div>
     <div class="nav-team" id="team-card">
       <div class="nt-name">Takım</div>
@@ -360,6 +364,57 @@
     </section>
 
     <!-- GELİŞİM -->
+    <section class="page" data-page="/lineup" id="page-lineup" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="layout-grid"></i> Taktik Tahtası</h2>
+        <div class="page-actions">
+          <select id="lineup-formation" class="formation-select">
+            <option value="442">4-4-2</option>
+            <option value="433">4-3-3</option>
+            <option value="352">3-5-2</option>
+            <option value="451">4-5-1</option>
+          </select>
+          <span class="muted" id="lineup-saved-info">—</span>
+        </div>
+      </div>
+
+      <div class="lineup-layout">
+        <div class="lineup-pitch-wrap">
+          <div class="lineup-pitch" id="lineup-pitch"></div>
+        </div>
+        <div class="lineup-side">
+          <div class="card">
+            <div class="card-header">
+              <i data-lucide="users"></i>
+              <h3>Yedekler</h3>
+              <span class="muted" id="bench-count" style="margin-left: auto; font-size: 11px">—</span>
+            </div>
+            <div class="bench-list" id="bench-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <i data-lucide="info"></i>
+              <h3>Yardım</h3>
+            </div>
+            <div class="muted" style="font-size: 12px; line-height: 1.6">
+              • Oyuncuları sürükleyerek sahadaki yerlerini değiştir<br>
+              • Yedek oyuncuyu sahaya sürükle, sahadaki oyuncu yedek olur<br>
+              • Formasyon değiştir → sahadaki sayı ve diziliş değişir<br>
+              • <strong>Kaydet</strong> butonuyla değişiklikler maç öncesi uygulanır
+            </div>
+          </div>
+          <div class="lineup-actions">
+            <button class="btn primary" id="btn-lineup-save">
+              <i data-lucide="save"></i> Kaydet
+            </button>
+            <button class="btn ghost" id="btn-lineup-reset">
+              <i data-lucide="rotate-ccw"></i> Sıfırla
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="page" data-page="/development" id="page-development" style="display:none">
       <div class="page-header">
         <h2><i data-lucide="trending-up"></i> Oyuncu Gelişimi</h2>
@@ -536,6 +591,9 @@
     <div class="modal-actions">
       <button class="btn ghost" id="btn-edit-squad">
         <i data-lucide="users"></i> Kadro Değiştir
+      </button>
+      <button class="btn ghost" id="btn-tactics-board">
+        <i data-lucide="layout-grid"></i> Taktik Tahtası
       </button>
       <button class="btn primary" id="btn-start-match-confirm">
         <i data-lucide="play"></i> Maçı Başlat

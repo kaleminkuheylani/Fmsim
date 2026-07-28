@@ -176,6 +176,15 @@ const els = {
   stdSeason: $('std-season'),
   // dev
   devList: $('dev-list'),
+  // lineup
+  lineupFormation: $('lineup-formation'),
+  lineupPitch: $('lineup-pitch'),
+  lineupBench: $('bench-list'),
+  lineupBenchCount: $('bench-count'),
+  lineupSavedInfo: $('lineup-saved-info'),
+  btnLineupSave: $('btn-lineup-save'),
+  btnLineupReset: $('btn-lineup-reset'),
+  btnTacticsBoard: $('btn-tactics-board'),
   // player page
   playerPageName: $('player-page-name'),
   phName: $('ph-name'),
@@ -231,6 +240,7 @@ function applyRoute() {
   else if (route === '/transfers') renderTransferPage();
   else if (route === '/standings') renderStandingsPage();
   else if (route === '/development') renderDevelopmentPage();
+  else if (route === '/lineup') renderLineupPage();
   else if (route === '/match') renderMatchPage();
   else if (route === '/report') renderReport();
   else if (route === '/player') renderPlayerPage();
@@ -725,6 +735,327 @@ function renderStandingsPage() {
       <div style="color: var(--text-dim); font-size: 11px;">${(s.form || '———').slice(-5)}</div>
     `;
     els.standingsList.appendChild(row);
+  }
+}
+
+// === FORMASYON ŞABLONLARI (taktik tahtası için) ===
+// Her slot: { role: GK/DF/OS/FV, x: yatay %, y: dikey % }
+// x: 0 = kale arkası (kendi kalesi), 100 = rakip kale
+const TACTIC_FORMATIONS = {
+  '442': [
+    { role: 'GK', x: 50, y: 92 },
+    { role: 'DF', x: 15, y: 75 },
+    { role: 'DF', x: 38, y: 78 },
+    { role: 'DF', x: 62, y: 78 },
+    { role: 'DF', x: 85, y: 75 },
+    { role: 'OS', x: 15, y: 50 },
+    { role: 'OS', x: 38, y: 52 },
+    { role: 'OS', x: 62, y: 52 },
+    { role: 'OS', x: 85, y: 50 },
+    { role: 'FV', x: 35, y: 22 },
+    { role: 'FV', x: 65, y: 22 },
+  ],
+  '433': [
+    { role: 'GK', x: 50, y: 92 },
+    { role: 'DF', x: 15, y: 75 },
+    { role: 'DF', x: 38, y: 78 },
+    { role: 'DF', x: 62, y: 78 },
+    { role: 'DF', x: 85, y: 75 },
+    { role: 'OS', x: 25, y: 50 },
+    { role: 'OS', x: 50, y: 52 },
+    { role: 'OS', x: 75, y: 50 },
+    { role: 'FV', x: 25, y: 20 },
+    { role: 'FV', x: 50, y: 18 },
+    { role: 'FV', x: 75, y: 20 },
+  ],
+  '352': [
+    { role: 'GK', x: 50, y: 92 },
+    { role: 'DF', x: 20, y: 78 },
+    { role: 'DF', x: 50, y: 82 },
+    { role: 'DF', x: 80, y: 78 },
+    { role: 'OS', x: 12, y: 55 },
+    { role: 'OS', x: 32, y: 58 },
+    { role: 'OS', x: 50, y: 55 },
+    { role: 'OS', x: 68, y: 58 },
+    { role: 'OS', x: 88, y: 55 },
+    { role: 'FV', x: 35, y: 22 },
+    { role: 'FV', x: 65, y: 22 },
+  ],
+  '451': [
+    { role: 'GK', x: 50, y: 92 },
+    { role: 'DF', x: 15, y: 75 },
+    { role: 'DF', x: 38, y: 78 },
+    { role: 'DF', x: 62, y: 78 },
+    { role: 'DF', x: 85, y: 75 },
+    { role: 'OS', x: 10, y: 55 },
+    { role: 'OS', x: 30, y: 53 },
+    { role: 'OS', x: 50, y: 50 },
+    { role: 'OS', x: 70, y: 53 },
+    { role: 'OS', x: 90, y: 55 },
+    { role: 'FV', x: 50, y: 22 },
+  ],
+};
+
+// === RENDER: TAKTİK TAHTAYI ===
+let lineupState = {
+  formation: '442',
+  slots: Array(11).fill(null), // slot i -> playerId
+  bench: [], // playerId[] (yedek)
+};
+
+function renderLineupPage() {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+
+  // Başlangıç: mevcut sahadaki 11'i al
+  const onField = user.players.filter(p => p.onField);
+  if (lineupState.slots.every(s => s === null) && onField.length === 11) {
+    // İlk render — mevcut dizilişten başla
+    lineupState.formation = user.formation || '442';
+    const slots = TACTIC_FORMATIONS[lineupState.formation];
+    for (let i = 0; i < 11; i++) {
+      lineupState.slots[i] = onField[i]?.id || null;
+    }
+    const onFieldIds = new Set(onField.map(p => p.id));
+    lineupState.bench = user.players.filter(p => !onFieldIds.has(p.id)).map(p => p.id);
+  }
+
+  // Formasyon dropdown sync
+  if (els.lineupFormation) {
+    els.lineupFormation.value = lineupState.formation;
+  }
+
+  // Saha
+  drawPitch();
+
+  // Yedekler
+  drawBench();
+
+  // Saved info
+  if (els.lineupSavedInfo) {
+    const filled = lineupState.slots.filter(s => s !== null).length;
+    els.lineupSavedInfo.textContent = `${filled}/11 dolduruldu`;
+  }
+
+  // Formasyon değişim
+  els.lineupFormation?.addEventListener('change', (e) => {
+    lineupState.formation = e.target.value;
+    lineupState.slots = Array(11).fill(null);
+    drawPitch();
+  }, { once: true });
+
+  // Kaydet
+  els.btnLineupSave?.addEventListener('click', saveLineup, { once: true });
+
+  // Sıfırla
+  els.btnLineupReset?.addEventListener('click', () => {
+    const onFieldNow = user.players.filter(p => p.onField);
+    lineupState.formation = user.formation || '442';
+    lineupState.slots = Array(11).fill(null);
+    for (let i = 0; i < 11; i++) {
+      lineupState.slots[i] = onFieldNow[i]?.id || null;
+    }
+    const ids = new Set(onFieldNow.map(p => p.id));
+    lineupState.bench = user.players.filter(p => !ids.has(p.id)).map(p => p.id);
+    if (els.lineupFormation) els.lineupFormation.value = lineupState.formation;
+    drawPitch();
+    drawBench();
+  }, { once: true });
+
+  // Taktik modalındaki "Taktik Tahtası" butonu → sayfaya yönlendir
+  els.btnTacticsBoard?.addEventListener('click', () => {
+    els.tacticsModal.style.display = 'none';
+    navigate('/lineup');
+  }, { once: true });
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function drawPitch() {
+  if (!els.lineupPitch) return;
+  els.lineupPitch.innerHTML = '';
+  const slots = TACTIC_FORMATIONS[lineupState.formation] || TACTIC_FORMATIONS['442'];
+  const user = getUserTeam();
+  if (!user) return;
+
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    const playerId = lineupState.slots[i];
+    const player = playerId ? user.players.find(p => p.id === playerId) : null;
+
+    const slotEl = document.createElement('div');
+    slotEl.className = `lp-slot ${slot.role}`;
+    slotEl.style.left = `${slot.x}%`;
+    slotEl.style.top = `${slot.y}%`;
+    slotEl.dataset.slotIndex = i;
+    slotEl.dataset.role = slot.role;
+
+    if (player) {
+      const chip = document.createElement('div');
+      chip.className = `lp-player-chip ${player.position}`;
+      chip.draggable = true;
+      chip.dataset.playerId = player.id;
+      chip.dataset.fromSlot = i;
+      const firstName = (player.name || '').split(' ').slice(0, 2).join(' ');
+      chip.innerHTML = `
+        <div class="lpp-pos">${player.position}</div>
+        <div class="lpp-name">${firstName}</div>
+      `;
+      chip.addEventListener('dragstart', onChipDragStart);
+      chip.addEventListener('dragend', onChipDragEnd);
+      slotEl.appendChild(chip);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'lp-empty';
+      empty.textContent = '+';
+      slotEl.appendChild(empty);
+    }
+
+    // Drop target
+    slotEl.addEventListener('dragover', e => {
+      e.preventDefault();
+      slotEl.classList.add('dragover');
+    });
+    slotEl.addEventListener('dragleave', () => slotEl.classList.remove('dragover'));
+    slotEl.addEventListener('drop', e => {
+      e.preventDefault();
+      slotEl.classList.remove('dragover');
+      onDropOnSlot(i, slot.role);
+    });
+
+    els.lineupPitch.appendChild(slotEl);
+  }
+}
+
+function drawBench() {
+  if (!els.lineupBench) return;
+  els.lineupBench.innerHTML = '';
+  const user = getUserTeam();
+  if (!user) return;
+  const fieldedIds = new Set(lineupState.slots.filter(s => s !== null));
+  const benchPlayers = user.players.filter(p => !fieldedIds.has(p.id));
+
+  if (els.lineupBenchCount) {
+    els.lineupBenchCount.textContent = `${benchPlayers.length} yedek`;
+  }
+
+  // Pozisyona göre sırala
+  const posOrder = { GK: 1, DF: 2, OS: 3, FV: 4 };
+  benchPlayers.sort((a, b) => (posOrder[a.position] || 5) - (posOrder[b.position] || 5));
+
+  for (const p of benchPlayers) {
+    const item = document.createElement('div');
+    item.className = `bench-item ${p.position}`;
+    item.draggable = true;
+    item.dataset.playerId = p.id;
+    const rating = computePlayerRating(p).toFixed(1);
+    item.innerHTML = `
+      <span class="bi-pos">${p.position}</span>
+      <span class="bi-name">${p.name}</span>
+      <span class="bi-rating">${rating}</span>
+    `;
+    item.addEventListener('dragstart', onChipDragStart);
+    item.addEventListener('dragend', onChipDragEnd);
+    els.lineupBench.appendChild(item);
+  }
+}
+
+let dragData = null;
+function onChipDragStart(e) {
+  const playerId = e.currentTarget.dataset.playerId;
+  const fromSlot = e.currentTarget.dataset.fromSlot;
+  const fromBench = !fromSlot;
+  dragData = { playerId, fromSlot: fromSlot ? parseInt(fromSlot) : null, fromBench };
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', playerId);
+}
+
+function onChipDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.lp-slot').forEach(s => s.classList.remove('dragover'));
+  dragData = null;
+}
+
+function onDropOnSlot(slotIndex, role) {
+  if (!dragData) return;
+  const user = getUserTeam();
+  if (!user) return;
+  const player = user.players.find(p => p.id === dragData.playerId);
+  if (!player) return;
+
+  // Pozisyon uyumu kontrolü (GK sadece GK slotuna, vs.)
+  if (player.position !== role && player.position !== 'OS') {
+    // OS her yere gidebilir, diğerleri sadece kendi slotuna
+    if (role !== 'OS') {
+      alert(`Bu oyuncu ${player.position} pozisyonunda, ${role} slotuna atanamaz.`);
+      return;
+    }
+  }
+
+  // Mevcut slot'taki oyuncu (varsa) yedek olur
+  const currentAtSlot = lineupState.slots[slotIndex];
+  if (dragData.fromSlot !== null) {
+    // Saha içi değişim
+    lineupState.slots[dragData.fromSlot] = currentAtSlot;
+  } else {
+    // Yedekten geldi — slot'taki yedek olur
+    if (currentAtSlot) {
+      lineupState.bench.push(currentAtSlot);
+    }
+  }
+  // Yeni atama
+  if (dragData.fromBench) {
+    lineupState.bench = lineupState.bench.filter(id => id !== dragData.playerId);
+  }
+  lineupState.slots[slotIndex] = dragData.playerId;
+
+  drawPitch();
+  drawBench();
+  if (els.lineupSavedInfo) {
+    const filled = lineupState.slots.filter(s => s !== null).length;
+    els.lineupSavedInfo.textContent = `${filled}/11 dolduruldu`;
+  }
+}
+
+function saveLineup() {
+  const user = getUserTeam();
+  if (!user) return;
+  const filled = lineupState.slots.filter(s => s !== null).length;
+  if (filled < 11) {
+    alert(`⚠️ Tüm 11 slot doldurulmalı! (${filled}/11)`);
+    return;
+  }
+  // Oyuncuların onField ve position bilgilerini güncelle
+  const slotToRole = (i) => TACTIC_FORMATIONS[lineupState.formation]?.[i]?.role;
+  for (let i = 0; i < 11; i++) {
+    const pid = lineupState.slots[i];
+    if (!pid) continue;
+    const player = user.players.find(p => p.id === pid);
+    if (!player) continue;
+    const slot = TACTIC_FORMATIONS[lineupState.formation]?.[i];
+    if (slot) {
+      // Oyuncu sahada, rolü slot rolü
+      player.onField = true;
+      // GK→GK, DF→DF, OS→OS, FV→FV. Sadece OS her yere gidebilir.
+      if (player.position === 'OS' || slot.role === 'OS') {
+        player.position = slot.role;
+      }
+    }
+  }
+  // Yedekler
+  const fieldedIds = new Set(lineupState.slots.filter(s => s !== null));
+  for (const p of user.players) {
+    if (!fieldedIds.has(p.id)) {
+      p.onField = false;
+    }
+  }
+  user.formation = lineupState.formation;
+  saveGame();
+  alert('✅ Taktik kaydedildi! Maça bu dizilişle çıkılacak.');
+  if (els.lineupSavedInfo) {
+    els.lineupSavedInfo.textContent = '✅ Kaydedildi';
   }
 }
 
