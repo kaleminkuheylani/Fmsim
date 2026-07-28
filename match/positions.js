@@ -400,6 +400,53 @@ function basePositionOf(player) {
   return { x: slot.x, y: slot.y };
 }
 
+// === ENTEGRASYON: decision.js için helper'lar ===
+
+/**
+ * Oyuncunun etrafındaki sıkışıklık (5m yarıçap içinde rakip sayısı).
+ * decision.js'te "sıkışmışsam pas at" kararı için kullanılır.
+ */
+export function getPressure(player, match, radius = 5) {
+  const side = match.ballSide;
+  const opp = side === 'home' ? match.away : match.home;
+  const ball = match.ballPos;
+  return opp.players.filter(p =>
+    p.onField && p.position !== 'GK' &&
+    Math.hypot(p.live.x - ball.x, p.live.y - ball.y) < radius
+  ).length;
+}
+
+/**
+ * Oyuncu hareket halinde mi? (live.x, target X farklı mı?)
+ * Motion pass için kullanılır.
+ */
+export function isInMotion(player, match) {
+  if (!player.live) return false;
+  const base = basePositionOf(player);
+  if (!base) return false;
+  // Hedef pozisyondan (formation + offset) en az 3m uzaksa hareket ediyor
+  const dist = Math.hypot(player.live.x - base.x, player.live.y - base.y);
+  return dist > 3;
+}
+
+/**
+ * Oyuncunun etrafındaki boş alan skoru (0-1).
+ * Yüksek = boş alan, dribble için uygun.
+ * 0 = sıkışık, 1 = boş.
+ */
+export function getOpenness(player, match, radius = 8) {
+  const side = match.ballSide;
+  const opp = side === 'home' ? match.away : match.home;
+  const ball = match.ballPos;
+  // Yarıçap içinde rakipler
+  const opponentsNearby = opp.players.filter(p =>
+    p.onField && p.position !== 'GK' &&
+    Math.hypot(p.live.x - ball.x, p.live.y - ball.y) < radius
+  ).length;
+  // 0 rakip → 1.0 (çok boş), 4+ rakip → 0.0 (sıkışık)
+  return Math.max(0, 1 - opponentsNearby / 4);
+}
+
 /**
  * Set-piece / out-of-play sonrası tüm oyuncuları kendi formasyon pozisyonlarına
  * snap'le. Set-piece'ler (taç, kale vuruşu, korner) oyunun "duruş" anıdır —

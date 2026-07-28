@@ -19,6 +19,7 @@
 import { getEffective } from './calc.js';
 import { inAnyBox, inHomeBox, inAwayBox } from './state.js';
 import { ppoDecide, ppoForward, extractState } from './ppo_policy.js';
+import { getPressure, isInMotion, getOpenness } from './positions.js';
 
 // === YARDIMCI: nokta-segment mesafesi ===
 // p noktasının (px, py) ile (x1,y1)-(x2,y2) segmenti arasındaki en kısa mesafe
@@ -263,12 +264,29 @@ export function decideAction(player, match) {
     return decideForGoalkeeper(player, match);
   }
 
-  // 1) ŞUT — kale yakınsa (PPO'dan önce — gerçek maçlarda kaleye yakın oyuncu şut atar)
+  // 1) ŞUT — kale yakınsa (PPO'dan önce)
   if (shouldShoot(player, match)) return 'shoot';
+
+  // === ENTEGRASYON: sıkışıklık + hareket durumu ===
+  // positions.js'den bilgi al: oyuncu sıkışmış mı, hareket halinde mi, boş alan var mı?
+  const pressure = getPressure(player, match, 5);   // 5m içinde rakip sayısı
+  const openness = getOpenness(player, match, 8);   // 0-1 boş alan skoru
+  const inMotion = isInMotion(player, match);        // hareket halinde mi?
 
   // 2) PPO RL policy — gerçek Fmsim verisinden öğrendi (5 action)
   const ppoAction = ppoDecide(player, match);
   if (ppoAction) {
+    // === ENTEGRASYON: PPO + pressure ===
+    // Sıkışmışken PPO 'dribble' dese bile → pas tercih et (organized)
+    if (ppoAction === 'dribble' && pressure >= 2 && openness < 0.3) {
+      // Çok sıkışmış, PPO'yu override et
+      if (shouldPass(player, match)) return pickPassType(player, match);
+    }
+    // Hareket halindeyken PPO 'passShort' → motion pass (daha güvenli)
+    if (ppoAction === 'passShort' && inMotion && pressure < 1) {
+      // Hareket halinde ve boş alan → dribble'a dönüştür
+      return 'dribble';
+    }
     if (ppoAction === 'shoot') return 'shoot';
     if (ppoAction === 'cross' && shouldCross(player, match)) return 'cross';
     if (ppoAction === 'passShort') return 'passShort';
@@ -276,7 +294,17 @@ export function decideAction(player, match) {
     if (ppoAction === 'dribble') return 'dribble';
   }
 
-  // 3) PPO yoksa veya guard başarısız → rule-based fallback
+  // 3) Rule-based fallback (PPO yoksa veya guard başarısız)
+  // === ENTEGRASYON: pressure + motion ===
+  // Sıkışmış + pas mümkün → pas
+  if (pressure >= 2 && openness < 0.3 && shouldPass(player, match)) {
+    return pickPassType(player, match);
+  }
+  // Hareket halinde + boş alan + pas arkadaşsız → dribble
+  if (inMotion && openness > 0.5 && !shouldPass(player, match)) {
+    return 'dribble';
+  }
+
   if (shouldCross(player, match)) return 'cross';
   if (shouldPass(player, match)) return pickPassType(player, match);
   if (shouldHoldOrRecycle(player, match)) {
