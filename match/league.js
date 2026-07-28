@@ -10,6 +10,7 @@
 
 import { generateUniqueClubName, resetClubPool } from './clubName.js';
 import { buildTeam } from './teamBuilder.js';
+import { TEAM_DATABASE } from './teamDatabase.js';
 import { createDevelopment } from './development.js';
 import { calculatePlayerValue, ClubBudget } from './transfer.js';
 
@@ -47,11 +48,34 @@ export class League {
       this.userTeamId = teamId;
     }
 
-    // 17 AI takım
+    // 17 AI takım — statik veri tabanından
     for (let i = 0; i < LEAGUE_SIZE - (userTeam ? 1 : 0); i++) {
-      const clubName = generateUniqueClubName();
-      const team = buildTeam(clubName, '442', false);
-      team.id = `ai_${i}`;
+      const db = TEAM_DATABASE[i];
+      const team = buildTeam(db.name, db.formation, false);
+      team.id = db.id;
+      team.shortName = db.shortName;
+      team.style = db.style;
+      team.power = db.power;
+      team.description = db.description;
+      // Yıldız seviyelerini database'den ata
+      const stars = db.stars || [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+      for (let p = 0; p < team.players.length; p++) {
+        const player = team.players[p];
+        const posIndex = p < 11 ? p : p - 11; // ilk 11 + yedekler
+        const star = p < 11 ? (stars[posIndex] || 1) : 1;
+        player.stars = star;
+        // Yıldız arttıkça yetenekler artsın
+        const bonus = star * 5; // 1★ +0, 2★ +5, 3★ +10
+        if (player.attrs) {
+          for (const k in player.attrs) {
+            player.attrs[k] = Math.min(85, player.attrs[k] + bonus);
+          }
+        }
+        // Yaş db.avgAge'ye yakın
+        const ageVariance = Math.floor(Math.random() * 5) - 2; // ±2
+        player.age = Math.max(18, Math.min(36, (db.avgAge || 26) + ageVariance));
+        player.potential = 70 + star * 8;
+      }
       team.budget = new ClubBudget(SEASON_STARTING_BUDGET);
       team.budget.updateWages(team.players);
       team.points = 0; team.played = 0;

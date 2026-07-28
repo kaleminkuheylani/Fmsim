@@ -150,6 +150,7 @@ const els = {
   tacticsGrid: $('tactics-grid'),
   formationGrid: $('formation-grid'),
   btnStartMatchConfirm: $('btn-start-match-confirm'),
+  btnEditSquad: $('btn-edit-squad'),
   // match tactic info
   tiForm: $('ti-form'),
   tiTactic: $('ti-tactic'),
@@ -1758,6 +1759,12 @@ els.btnStartMatchConfirm?.addEventListener('click', () => {
   const opp = getOpponentTeam();
   const fix = getUserMatchThisWeek();
   if (user && opp && fix) launchMatch(user, opp, fix, false);
+});
+
+// Maç öncesi "Kadro Değiştir" — taktik modalını kapat, değişiklik modalını aç
+els.btnEditSquad?.addEventListener('click', () => {
+  els.tacticsModal.style.display = 'none';
+  openSubModal(null, false);
 });
 
 // === OYUNCU DETAY SAYFASI ===

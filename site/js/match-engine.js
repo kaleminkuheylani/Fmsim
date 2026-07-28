@@ -3320,6 +3320,213 @@ function generateMatchClubs() {
   return { home, away };
 }
 
+// match/teamDatabase.js
+var TEAM_DATABASE = [
+  // === ŞAMPİYON ADAYI — güçlü, derin kadro ===
+  {
+    id: "ai_0",
+    name: "Galata Bo\u011Faz FK",
+    shortName: "Galata",
+    power: 5,
+    // 1-5
+    style: "agresif",
+    formation: "433",
+    avgAge: 26,
+    stars: [3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1],
+    description: "Son \u015Fampiyon, h\xFCcumda g\xFC\xE7l\xFC, y\u0131ld\u0131z oyuncularla dolu"
+  },
+  {
+    id: "ai_1",
+    name: "Anadolu Kartal\u0131 SK",
+    shortName: "Kartal",
+    power: 5,
+    style: "agresif",
+    formation: "433",
+    avgAge: 27,
+    stars: [3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1],
+    description: "S\xFCper Lig devi, y\u0131ld\u0131z golc\xFCyle tan\u0131n\u0131yor"
+  },
+  // === GÜÇLÜ — ilk 6 hedefi ===
+  {
+    id: "ai_2",
+    name: "Erbil Y\u0131ld\u0131z\u0131",
+    shortName: "Erbil",
+    power: 4,
+    style: "agresif",
+    formation: "442",
+    avgAge: 25,
+    stars: [2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1],
+    description: "Y\xFCkselen y\u0131ld\u0131z, gen\xE7 ve dinamik kadro"
+  },
+  {
+    id: "ai_3",
+    name: "Mavi Vatan Spor",
+    shortName: "Vatan",
+    power: 4,
+    style: "kontra",
+    formation: "451",
+    avgAge: 28,
+    stars: [3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1],
+    description: "Tecr\xFCbeli, kontra atak ustas\u0131, deplasmanda tehlikeli"
+  },
+  {
+    id: "ai_4",
+    name: "F\u0131rt\u0131na Stadyumu",
+    shortName: "F\u0131rt\u0131na",
+    power: 4,
+    style: "kanat",
+    formation: "442",
+    avgAge: 26,
+    stars: [2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1],
+    description: "Kanat h\xFCcumlar\u0131yla \xFCnl\xFC, klasik 4-4-2"
+  },
+  {
+    id: "ai_5",
+    name: "Sancak Birlik",
+    shortName: "Sancak",
+    power: 3,
+    style: "merkez",
+    formation: "352",
+    avgAge: 27,
+    stars: [2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "3-5-2 ile merkezden organize, sab\u0131rl\u0131 oyun"
+  },
+  // === ORTA — orta sıra takımları ===
+  {
+    id: "ai_6",
+    name: "Trakya R\xFCzgar\u0131",
+    shortName: "Trakya",
+    power: 3,
+    style: "agresif",
+    formation: "442",
+    avgAge: 24,
+    stars: [2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Gen\xE7, a\xE7\u0131k futbol, gol atar gol yer"
+  },
+  {
+    id: "ai_7",
+    name: "\xC7\u0131nar Demirspor",
+    shortName: "\xC7\u0131nar",
+    power: 3,
+    style: "kontra",
+    formation: "451",
+    avgAge: 26,
+    stars: [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Dengeli orta saha, deplasmanda zorlu"
+  },
+  {
+    id: "ai_8",
+    name: "Galata 1934",
+    shortName: "Galata34",
+    power: 3,
+    style: "kanat",
+    formation: "442",
+    avgAge: 27,
+    stars: [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Tarih\xE7i kul\xFCp, iki kanat h\xFCcumu"
+  },
+  {
+    id: "ai_9",
+    name: "Vadi Kaplanlar\u0131",
+    shortName: "Vadi",
+    power: 2,
+    style: "agresif",
+    formation: "433",
+    avgAge: 23,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "\xC7ok gen\xE7, potansiyelli, s\xFCrpriz sonu\xE7lar"
+  },
+  {
+    id: "ai_10",
+    name: "Ovac\u0131k G\xFCc\xFC",
+    shortName: "Ovac\u0131k",
+    power: 2,
+    style: "merkez",
+    formation: "352",
+    avgAge: 29,
+    stars: [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Tecr\xFCbeli 3-5-2, evinde zorlu deplasmanda d\xFC\u015Fer"
+  },
+  {
+    id: "ai_11",
+    name: "Pamuk Arena",
+    shortName: "Pamuk",
+    power: 2,
+    style: "defansif",
+    formation: "451",
+    avgAge: 28,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Defansif, az gol yer, az gol atar"
+  },
+  // === ALT — küme düşme adayı ===
+  {
+    id: "ai_12",
+    name: "Bar\u0131\u015F Yelken SK",
+    shortName: "Yelken",
+    power: 2,
+    style: "agresif",
+    formation: "442",
+    avgAge: 30,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Ya\u015Fl\u0131 kadro, son \u015Fans"
+  },
+  {
+    id: "ai_13",
+    name: "Lale Bah\xE7esi FK",
+    shortName: "Lale",
+    power: 1,
+    style: "defansif",
+    formation: "451",
+    avgAge: 31,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "\xC7ok ya\u015Fl\u0131, alt s\u0131ra demirba\u015F\u0131"
+  },
+  {
+    id: "ai_14",
+    name: "Marmara F\u0131rt\u0131nas\u0131",
+    shortName: "F\u0131rt\u0131na2",
+    power: 2,
+    style: "kontra",
+    formation: "451",
+    avgAge: 26,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "Orta s\u0131ra, de\u011Fi\u015Fken performans"
+  },
+  {
+    id: "ai_15",
+    name: "\u0130stanbul Park FK",
+    shortName: "Park",
+    power: 1,
+    style: "defansif",
+    formation: "442",
+    avgAge: 32,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "\xC7ok ya\u015Fl\u0131 defans, k\xFCme d\xFC\u015Fme tehlikesi"
+  },
+  {
+    id: "ai_16",
+    name: "Pamuk Gen\xE7lik",
+    shortName: "PamukG",
+    power: 1,
+    style: "agresif",
+    formation: "442",
+    avgAge: 21,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "En gen\xE7 tak\u0131m, \xE7\u0131raklar sahada"
+  },
+  {
+    id: "ai_17",
+    name: "Erbil 1934",
+    shortName: "Erbil34",
+    power: 1,
+    style: "merkez",
+    formation: "352",
+    avgAge: 29,
+    stars: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    description: "3-5-2, orta s\u0131ra m\xFCcadelesi"
+  }
+];
+
 // match/development.js
 var DECLINE_START = 28;
 var PEAK_AGE_MAX = 30;
@@ -3653,9 +3860,29 @@ var League = class {
       this.userTeamId = teamId;
     }
     for (let i = 0; i < LEAGUE_SIZE - (userTeam ? 1 : 0); i++) {
-      const clubName = generateUniqueClubName();
-      const team = buildTeam(clubName, "442", false);
-      team.id = `ai_${i}`;
+      const db = TEAM_DATABASE[i];
+      const team = buildTeam(db.name, db.formation, false);
+      team.id = db.id;
+      team.shortName = db.shortName;
+      team.style = db.style;
+      team.power = db.power;
+      team.description = db.description;
+      const stars = db.stars || [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+      for (let p = 0; p < team.players.length; p++) {
+        const player = team.players[p];
+        const posIndex = p < 11 ? p : p - 11;
+        const star = p < 11 ? stars[posIndex] || 1 : 1;
+        player.stars = star;
+        const bonus = star * 5;
+        if (player.attrs) {
+          for (const k in player.attrs) {
+            player.attrs[k] = Math.min(85, player.attrs[k] + bonus);
+          }
+        }
+        const ageVariance = Math.floor(Math.random() * 5) - 2;
+        player.age = Math.max(18, Math.min(36, (db.avgAge || 26) + ageVariance));
+        player.potential = 70 + star * 8;
+      }
       team.budget = new ClubBudget(SEASON_STARTING_BUDGET);
       team.budget.updateWages(team.players);
       team.points = 0;
