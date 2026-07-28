@@ -272,15 +272,18 @@ function resolveShoot(match, carrier) {
   const reflexes = keeper.attrs?.reflexes || 50;
   const positioning = keeper.attrs?.positioning || 50;
   const saveQuality = reflexes * 0.6 + positioning * 0.4;
-  // 50 yetenek = 1.0x, 100 yetenek = 0.5x
-  const saveMult = 1.5 - (saveQuality / 100) * 1.0;
-  const saveAdjustedXG = Math.max(0.01, effectiveXG * saveMult);
+  // 50 yetenek = 1.0x, 100 yetenek = 0.5x (daha az avantajlı kaleci)
+  const saveMult = 1.0 - (saveQuality / 100) * 0.5;
+  const saveAdjustedXG = Math.max(0.02, effectiveXG * saveMult);
 
   // SONUÇ: GOL MÜ, KURTARIŞ MI?
   const isGoal = Math.random() < saveAdjustedXG;
 
   carrier.live.shots++;
   match.stats.shots[side]++;
+  // xG stats'a kaydet (gerçek maç istatistiği gibi)
+  if (!match.stats.xG) match.stats.xG = { home: 0, away: 0 };
+  match.stats.xG[side] += saveAdjustedXG;
 
   if (isGoal) {
     // GOL!

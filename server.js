@@ -126,6 +126,7 @@ function snapshot(match) {
       shotsOnTarget: { ...match.stats.shotsOnTarget },
       corners: { ...match.stats.corners },
       fouls: { ...match.stats.fouls },
+      xG: match.stats.xG ? { ...match.stats.xG } : { home: 0, away: 0 },
     },
     momentum: Math.round(match.momentum * 100),
     finished: match.minute >= 90,
