@@ -1,87 +1,112 @@
 // /workspace/site/app.js
-// Narrative Spiker — Normal + Başkan modu
-// Sakatlık onayı, manuel değişiklik, transfer, gelişim, lig
+// Narrative Spiker — Başkan Modu · Çoklu sayfa düzeni
+// Routing: #/ (anasayfa), #/squad, #/transfers, #/standings, #/development
+// Özel sayfa: #/match (maç sırasında otomatik açılır)
 
 import {
   makeMatchState,
-  startMatch,
+  startMatch as startMatchOrig,
   simulateMinute,
-  createNarrator,
   buildTeam,
-  generateMatchClubs,
   generateUniqueName,
+  generateUniqueClubName,
   resetNamePool,
   resetClubPool,
 } from './js/match-engine.js';
 
+import { ATTRS, ROLE_WEIGHTS } from './game/playerSchema.js';
+
 if (window.lucide) lucide.createIcons();
 
 // === STATE ===
-let mode = 'normal'; // 'normal' | 'manager'
+let game = null;
 let match = null;
 let timer = null;
-let speed = 100;
 let searchQuery = '';
 let allEvents = [];
+let selectedInMatch = null;
+let lastRoute = '/';
+let lastReport = null;
 
-let HOME = null;
-let AWAY = null;
-let league = null;          // Başkan modu için
-let userTeam = null;         // Başkan modu kullanıcı takımı
-let pendingInjury = null;    // Sakatlık onayı bekliyor
-let matchPausedForInjury = false;
+// Maç 3 dakika sabit süre
+const MATCH_DURATION_SEC = 180; // saniye
+const TICK_INTERVAL_MS = 100;   // her tick 100ms = 0.1s maç zamanı
+let matchStartTime = 0;
+let matchSecondsElapsed = 0;
 
-// === TEAM BUILDER ===
-function buildMatchTeams() {
-  resetNamePool();
-  resetClubPool();
-  const clubs = generateMatchClubs();
-  HOME = buildTeam(clubs.home, '442', true);
-  AWAY = buildTeam(clubs.away, '442', false);
-  for (const team of [HOME, AWAY]) {
-    for (const p of team.players) {
-      p.age = 18 + Math.floor(Math.random() * 18);
-      p.potential = 50 + p.stars * 15 + Math.floor(Math.random() * 10);
-      p.live = p.live || {};
-      p.live.x = p.live.x || 50;
-      p.live.y = p.live.y || 35;
-      p.live.currentStamina = 100;
-      p.live.currentMorale = 60;
-      p.live.form = 0;
-      p.live.extraEffort = 0;
-      p.live.passesAttempted = 0;
-      p.live.passesCompleted = 0;
-      p.live.shots = 0;
-      p.live.shotsOnTarget = 0;
-      p.live.goals = 0;
-      p.live.saves = 0;
-      p.live.conceded = 0;
-      p.live.yellowCount = 0;
-      p.live.yellowCards = 0;
-      p.live.foulsCommitted = 0;
-      p.live.onField = p.live.onField || false;
-      p.live.rating = 6.5;
-      p.live.injuredThisTick = false;
-    }
-  }
-  return { HOME, AWAY };
+const STORAGE_KEY = 'narrative_spiker_save';
+
+// === HELPERS ===
+const $ = id => document.getElementById(id);
+
+function formatMoney(amount) {
+  if (amount == null) return '0 €';
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M €`;
+  if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}K €`;
+  return `${amount} €`;
 }
 
-// === DOM ===
-const $ = id => document.getElementById(id);
+// Pozisyon sırası (GK → DF → OS → FV), içinde isim A→Z
+const POSITION_ORDER = { GK: 1, DF: 2, OS: 3, FV: 4 };
+function sortByPositionThenName(a, b) {
+  const pa = POSITION_ORDER[a.position] || 99;
+  const pb = POSITION_ORDER[b.position] || 99;
+  if (pa !== pb) return pa - pb;
+  return (a.name || '').localeCompare(b.name || '', 'tr');
+}
+
+function getUserTeam() {
+  return game?.league?.teams?.find(t => t.id === 'user') || null;
+}
+
+function getUserMatchThisWeek() {
+  if (!game) return null;
+  const wk = game.league.currentWeek + 1;
+  return game.league.fixtures.find(f => f.week === wk &&
+    (f.homeId === 'user' || f.awayId === 'user'));
+}
+
+function getOpponentId() {
+  const fix = getUserMatchThisWeek();
+  if (!fix) return null;
+  return fix.homeId === 'user' ? fix.awayId : fix.homeId;
+}
+
+function getOpponentTeam() {
+  const oppId = getOpponentId();
+  if (!oppId) return null;
+  return game.league.teams.find(t => t.id === oppId);
+}
+
+// === TOPBAR ===
 const els = {
-  modeSelect: $('mode-select'),
-  btnStart: $('btn-start'),
-  btnStartLabel: $('btn-start-label'),
-  btnPause: $('btn-pause'),
+  tWeek: $('t-week'),
+  tPoints: $('t-points'),
+  tRank: $('t-rank'),
+  tBudget: $('t-budget'),
+  tSeason: $('t-season'),
   btnReset: $('btn-reset'),
-  speed: $('speed'),
-  speedVal: $('speed-val'),
+  teamCard: $('team-card'),
+  // page home
+  btnPlayWeek: $('btn-play-week'),
+  btnPlayLabel: $('btn-play-label'),
+  nextHome: $('next-home'),
+  nextAway: $('next-away'),
+  nextHomePos: $('next-home-pos'),
+  nextAwayPos: $('next-away-pos'),
+  wfWeek: $('wf-week'),
+  wfList: $('wf-list'),
+  recentResults: $('recent-results'),
+  // match page
   homeName: $('home-name'),
   awayName: $('away-name'),
   homeScore: $('home-score'),
   awayScore: $('away-score'),
   matchMinute: $('match-minute'),
+  clockLabel: $('clock-label'),
+  progressFill: $('progress-fill'),
+  progressText: $('progress-text'),
+  btnSkipMatch: $('btn-skip-match'),
   narrativeStream: $('narrative-stream'),
   eventsList: $('events-list'),
   eventCount: $('event-count'),
@@ -96,133 +121,610 @@ const els = {
   awayReds: $('away-reds'),
   homeSubs: $('home-subs'),
   awaySubs: $('away-subs'),
-  // Manager
-  managerPanel: $('manager-panel'),
-  budgetAmount: $('budget-amount'),
-  currentWeek: $('current-week'),
-  userPoints: $('user-points'),
-  userRank: $('user-rank'),
-  nextHome: $('next-home'),
-  nextAway: $('next-away'),
+  // report
+  repHome: $('rep-home'),
+  repAway: $('rep-away'),
+  repHomeScore: $('rep-home-score'),
+  repAwayScore: $('rep-away-score'),
+  repResultText: $('rep-result-text'),
+  repMeta: $('rep-meta'),
+  statsGrid: $('stats-grid'),
+  playTimeline: $('play-timeline'),
+  btnBackHome: $('btn-back-home'),
+  btnNextWeek: $('btn-next-week'),
+  btnSubInMatch: $('btn-sub-in-match'),
+  // sub modal
+  subModal: $('sub-modal'),
+  subMessage: $('sub-message'),
+  subOutList: $('sub-out-list'),
+  subInList: $('sub-in-list'),
+  btnSubCancel: $('btn-sub-cancel'),
+  // injury notice
+  injuryNoticeModal: $('injury-notice-modal'),
+  injuryNoticeMessage: $('injury-notice-message'),
+  btnInjuryOk: $('btn-injury-ok'),
+  // squad
   lineupList: $('lineup-list'),
   benchList: $('bench-list'),
-  btnPlayWeek: $('btn-play-week'),
+  squadLineupCount: $('squad-lineup-count'),
+  squadBenchCount: $('squad-bench-count'),
+  // transfers
   transferBudget: $('transfer-budget'),
   transferList: $('transfer-list'),
   filterPosition: $('filter-position'),
   filterAge: $('filter-age'),
   filterStars: $('filter-stars'),
+  // standings
   standingsList: $('standings-list'),
+  stdSeason: $('std-season'),
+  // dev
   devList: $('dev-list'),
-  // Modal
-  injuryModal: $('injury-modal'),
-  injuryMessage: $('injury-message'),
-  injurySubstitutes: $('injury-substitutes'),
 };
 
-// === MATCH INIT ===
-function newMatch() {
-  if (mode === 'manager' && userTeam) {
-    HOME = userTeam;
-    // Rakip olarak random AI takım
-    resetNamePool();
-    const oppName = generateUniqueName() + ' FC';
-    AWAY = buildTeam(oppName, '442', false);
-    for (const p of AWAY.players) {
-      p.age = 18 + Math.floor(Math.random() * 18);
-      p.potential = 50 + p.stars * 15 + Math.floor(Math.random() * 10);
-      p.live = p.live || {};
-      p.live.x = 50; p.live.y = 35;
-      p.live.currentStamina = 100; p.live.currentMorale = 60;
-      p.live.form = 0; p.live.extraEffort = 0;
-      p.live.passesAttempted = 0; p.live.passesCompleted = 0;
-      p.live.shots = 0; p.live.shotsOnTarget = 0;
-      p.live.goals = 0; p.live.saves = 0; p.live.conceded = 0;
-      p.live.yellowCount = 0; p.live.yellowCards = 0;
-      p.live.foulsCommitted = 0; p.live.onField = false;
-      p.live.rating = 6.5;
-      p.live.injuredThisTick = false;
-    }
-  } else {
-    buildMatchTeams();
-  }
-
-  match = makeMatchState({
-    home: HOME, away: AWAY,
-    homeFormation: '442', awayFormation: '442',
-  });
-  match.mode = mode;
-
-  // Sakatlık callback'i — başkan modunda oyunu duraklat
-  startMatch(match);
-
-  allEvents = [];
-  els.narrativeStream.innerHTML = '<p class="placeholder">Maç başlıyor...</p>';
-  els.eventsList.innerHTML = '';
-  els.eventCount.textContent = '0';
-  els.searchInfo.textContent = '';
-  els.search.value = '';
-  searchQuery = '';
-  els.searchClear.style.display = 'none';
-  renderScore();
-  if (mode === 'manager' && userTeam) {
-    renderSquad();
-  }
-  lucide.createIcons();
+// === ROUTING ===
+function getRoute() {
+  const hash = window.location.hash.slice(1) || '/';
+  return hash;
 }
 
-// === RENDER ===
-function renderScore() {
-  els.homeName.textContent = match.home.name;
-  els.awayName.textContent = match.away.name;
-  els.homeScore.textContent = match.homeScore;
-  els.awayScore.textContent = match.awayScore;
-  els.matchMinute.textContent = `${match.minute}'`;
+function navigate(route) {
+  window.location.hash = route;
+}
 
-  const homeOnField = match.home.players.filter(p => p.onField).length;
-  const awayOnField = match.away.players.filter(p => p.onField).length;
+function applyRoute() {
+  const route = getRoute();
+  lastRoute = route;
+
+  // Active nav state
+  document.querySelectorAll('.nav-item').forEach(a => {
+    a.classList.toggle('active', a.dataset.route === route);
+  });
+
+  // Page visibility
+  document.querySelectorAll('.page').forEach(p => {
+    const visible = p.dataset.page === route;
+    p.style.display = visible ? 'block' : 'none';
+  });
+
+  // Re-render based on route
+  renderTopbar();
+  if (route === '/') renderHome();
+  else if (route === '/squad') renderSquad();
+  else if (route === '/transfers') renderTransferPage();
+  else if (route === '/standings') renderStandingsPage();
+  else if (route === '/development') renderDevelopmentPage();
+  else if (route === '/match') renderMatchPage();
+  else if (route === '/report') renderReport();
+  if (window.lucide) lucide.createIcons();
+}
+
+window.addEventListener('hashchange', applyRoute);
+
+// === GAME INIT ===
+function newGame() {
+  resetNamePool();
+  resetClubPool();
+
+  const { League } = window.__NS;
+  game = { league: new League() };
+  const userClub = generateUniqueClubName();
+  const userTeam = buildTeam(userClub, '442', true);
+  for (const p of userTeam.players) {
+    p.age = 18 + Math.floor(Math.random() * 18);
+    p.potential = 50 + p.stars * 15 + Math.floor(Math.random() * 10);
+    p.value = 1_000_000 + p.stars * 2_000_000 + Math.floor(Math.random() * 1_000_000);
+    p.wage = 50_000 + p.stars * 50_000;
+  }
+  game.league.setup(userTeam);
+  game.league.userTeamId = 'user';
+  deployLineupToTeam(userTeam);
+  game.transferMarket = generateMarket();
+  saveGame();
+  applyRoute();
+}
+
+function deployLineupToTeam(team) {
+  for (const p of team.players) p.onField = false;
+  const positionOrder = ['GK', 'DF', 'OS', 'FV'];
+  const slots = { GK: 1, DF: 4, OS: 4, FV: 2 };
+  for (const pos of positionOrder) {
+    const candidates = team.players
+      .filter(p => p.position === pos)
+      .sort((a, b) => (b.attrs?.[primaryAttrFor(pos)] || 0) - (a.attrs?.[primaryAttrFor(pos)] || 0));
+    candidates.forEach((p, i) => { if (i < slots[pos]) p.onField = true; });
+  }
+}
+
+function primaryAttrFor(pos) {
+  return { GK: 'reflexes', DF: 'tackling', OS: 'passing', FV: 'finishing' }[pos] || 'passing';
+}
+
+function loadGame() {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) return null;
+    return JSON.parse(data);
+  } catch { return null; }
+}
+
+function saveGame() {
+  try {
+    const data = {
+      league: {
+        currentWeek: game.league.currentWeek,
+        season: game.league.season,
+        teams: game.league.teams,
+        fixtures: game.league.fixtures,
+        userTeamId: 'user',
+      },
+      transferMarket: game.transferMarket,
+      trainingPoints: game.trainingPoints,
+      lastTrainingWeek: game.lastTrainingWeek,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) { console.error('Save error', e); }
+}
+
+function generateMarket() {
+  resetNamePool();
+  const market = { players: [] };
+  const sizes = [
+    { count: 2, stars: 3, minAge: 24, maxAge: 32 },
+    { count: 4, stars: 2, minAge: 22, maxAge: 30 },
+    { count: 8, stars: 1, minAge: 18, maxAge: 23 },
+    { count: 6, stars: 1, minAge: 24, maxAge: 30 },
+  ];
+  for (const size of sizes) {
+    for (let i = 0; i < size.count; i++) {
+      const team = buildTeam('Market', '442', true);
+      const p = team.players[0];
+      p.age = size.minAge + Math.floor(Math.random() * (size.maxAge - size.minAge));
+      p.stars = size.stars;
+      p.potential = 50 + size.stars * 15 + Math.floor(Math.random() * 10);
+      p.value = 1_000_000 + size.stars * 2_000_000 + Math.floor(Math.random() * 3_000_000);
+      p.wage = 50_000 + size.stars * 50_000;
+      p.live = p.live || { x: 50, y: 35, currentStamina: 100, rating: 6.5 };
+      p.live.rating = 6.0 + size.stars + Math.random() * 0.5;
+      market.players.push(p);
+    }
+  }
+  return market;
+}
+
+// === RENDER: TOPBAR ===
+function renderTopbar() {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+  els.tBudget.textContent = formatMoney(user.budget?.budget || 50_000_000);
+  els.tWeek.textContent = game.league.currentWeek || 1;
+  els.tSeason.textContent = game.league.season || 1;
+  const standings = game.league.getStandings();
+  const userStanding = standings.find(s => s.isUser);
+  if (userStanding) {
+    els.tPoints.textContent = userStanding.points;
+    els.tRank.textContent = userStanding.pos;
+  }
+  els.teamCard.innerHTML = `
+    <div class="nt-name">${user.name}</div>
+    <div class="nt-meta">Lig: ${(standings[0]?.name) || '—'} önde</div>
+  `;
+}
+
+// === RENDER: ANASAYFA ===
+function renderHome() {
+  if (!game) return;
+  const wk = game.league.currentWeek + 1;
+  els.wfWeek.textContent = wk;
+
+  const userMatch = getUserMatchThisWeek();
+  if (userMatch) {
+    const home = game.league.teams.find(t => t.id === userMatch.homeId);
+    const away = game.league.teams.find(t => t.id === userMatch.awayId);
+    els.nextHome.textContent = home?.name || '—';
+    els.nextAway.textContent = away?.name || '—';
+    els.nextHomePos.textContent = userMatch.homeId === 'user' ? 'Ev sahibi' : 'Deplasman';
+    els.nextAwayPos.textContent = userMatch.awayId === 'user' ? 'Ev sahibi' : 'Deplasman';
+  } else {
+    els.nextHome.textContent = 'Sezon bitti!';
+    els.nextAway.textContent = '';
+  }
+
+  // Fikstür listesi
+  els.wfList.innerHTML = '';
+  const fixtures = game.league.fixtures.filter(f => f.week === wk);
+  for (const f of fixtures) {
+    const home = game.league.teams.find(t => t.id === f.homeId);
+    const away = game.league.teams.find(t => t.id === f.awayId);
+    if (!home || !away) continue;
+    const item = document.createElement('div');
+    item.className = 'fixture-item';
+    if (f.homeId === 'user' || f.awayId === 'user') item.classList.add('user');
+    if (f.played) item.classList.add('played');
+    const scoreText = f.result ? `${f.result.homeScore} - ${f.result.awayScore}` : '— : —';
+    const scoreClass = f.result?.homeScore > f.result?.awayScore ? 'win' : f.result?.homeScore < f.result?.awayScore ? 'lose' : '';
+    const time = f.homeId === 'user' || f.awayId === 'user' ? '20:30' : ['13:00', '16:00', '19:00'][Math.floor(Math.random() * 3)];
+    item.innerHTML = `
+      <div class="fi-time">${time}</div>
+      <div class="fi-teams">
+        <div class="fi-team ${f.homeId === 'user' ? 'user-team' : ''}">${home.name}</div>
+        <div class="fi-score ${scoreClass}">${scoreText}</div>
+        <div class="fi-team ${f.awayId === 'user' ? 'user-team' : ''}" style="text-align: left">${away.name}</div>
+      </div>
+      <div></div>
+    `;
+    els.wfList.appendChild(item);
+  }
+
+  // Recent results (son 5 hafta)
+  els.recentResults.innerHTML = '';
+  const playedFixtures = game.league.fixtures
+    .filter(f => f.played && (f.homeId === 'user' || f.awayId === 'user'))
+    .sort((a, b) => b.week - a.week)
+    .slice(0, 5);
+  if (playedFixtures.length === 0) {
+    els.recentResults.innerHTML = '<div class="empty">Henüz maç oynamadın. "Haftayı Oyna" ile başla.</div>';
+  } else {
+    for (const f of playedFixtures) {
+      const home = game.league.teams.find(t => t.id === f.homeId);
+      const away = game.league.teams.find(t => t.id === f.awayId);
+      const item = document.createElement('div');
+      item.className = 'recent-item';
+      const userHome = f.homeId === 'user';
+      const userScore = userHome ? f.result.homeScore : f.result.awayScore;
+      const oppScore = userHome ? f.result.awayScore : f.result.homeScore;
+      const result = userScore > oppScore ? 'G' : userScore < oppScore ? 'M' : 'B';
+      const resultColor = result === 'G' ? 'var(--good)' : result === 'M' ? 'var(--bad)' : 'var(--text-dim)';
+      item.innerHTML = `
+        <div class="ri-week">Hafta ${f.week}</div>
+        <div class="ri-match">
+          <strong style="color: ${resultColor}">${result}</strong>
+          ${userHome ? away.name : home.name} · ${userScore}-${oppScore}
+        </div>
+        <div class="ri-score">${userScore}-${oppScore}</div>
+      `;
+      els.recentResults.appendChild(item);
+    }
+  }
+}
+
+// === RENDER: SQUAD ===
+function renderSquad() {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+  let lineup = user.players.filter(p => p.onField);
+  let bench = user.players.filter(p => !p.onField);
+  // Pozisyona göre sırala (GK→DF→OS→FV), içinde alfabetik
+  lineup = lineup.sort(sortByPositionThenName);
+  bench = bench.sort(sortByPositionThenName);
+  els.squadLineupCount.textContent = lineup.length;
+  els.squadBenchCount.textContent = bench.length;
+  els.lineupList.innerHTML = '';
+  for (const p of lineup) els.lineupList.appendChild(playerItem(p, false));
+  els.benchList.innerHTML = '';
+  for (const p of bench) els.benchList.appendChild(playerItem(p, true));
+}
+
+function playerItem(p, isBench) {
+  const item = document.createElement('div');
+  item.className = 'player-item' + (isBench ? ' bench' : '');
+  if (p.live?.injured) item.classList.add('injured');
+  if (p.live?.redCard) item.classList.add('red-card');
+  const attrs = p.attrs || {};
+  const avg = Object.values(attrs).reduce((s, v) => s + v, 0) / Math.max(1, Object.keys(attrs).length);
+  item.innerHTML = `
+    <div class="p-pos">${p.position}</div>
+    <div class="p-name">${p.name}${p.live?.injured ? ' 🏥' : ''}${p.live?.redCard ? ' 🟥' : ''}</div>
+    <div class="p-age">${p.age}y</div>
+    <div class="p-rating">${(p.live?.rating || 6.5).toFixed(1)}</div>
+    <div class="p-meta">${avg.toFixed(0)} pot</div>
+    <button class="p-swap" data-pid="${p.id}"><i data-lucide="refresh-cw"></i> Değiştir</button>
+  `;
+  item.querySelector('.p-swap').addEventListener('click', () => openSubModal(p, isBench));
+  return item;
+}
+
+// === RENDER: STANDINGS ===
+function renderStandingsPage() {
+  if (!game) return;
+  els.stdSeason.textContent = game.league.season;
+  const standings = game.league.getStandings();
+  els.standingsList.innerHTML = '';
+  // Header
+  const header = document.createElement('div');
+  header.className = 'standings-header';
+  header.innerHTML = `
+    <div>#</div>
+    <div>Takım</div>
+    <div>O</div>
+    <div>Av</div>
+    <div>P</div>
+    <div>Son</div>
+  `;
+  els.standingsList.appendChild(header);
+  for (const s of standings) {
+    const row = document.createElement('div');
+    row.className = 'standings-row' + (s.isUser ? ' user' : '');
+    const posClass = s.pos === 1 ? 's-pos-1' : s.pos <= 3 ? 's-pos-2' : s.pos >= 16 ? 's-pos-rel' : '';
+    row.innerHTML = `
+      <div class="s-pos ${posClass}">${s.pos}</div>
+      <div class="s-name">${s.name}</div>
+      <div>${s.played}</div>
+      <div style="color: ${s.gd >= 0 ? 'var(--good)' : 'var(--bad)'}">${s.gd >= 0 ? '+' : ''}${s.gd}</div>
+      <div class="s-points">${s.points}</div>
+      <div style="color: var(--text-dim); font-size: 11px;">${(s.form || '———').slice(-5)}</div>
+    `;
+    els.standingsList.appendChild(row);
+  }
+}
+
+// === RENDER: DEVELOPMENT (Antrenman) ===
+function renderDevelopmentPage() {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+
+  // Antrenman puanı başlat (yoksa)
+  if (game.trainingPoints == null) game.trainingPoints = 5;
+  if (game.lastTrainingWeek == null) game.lastTrainingWeek = -1;
+  // Yeni hafta geldi mi? 5 puan yenile
+  if (game.lastTrainingWeek !== game.league.currentWeek) {
+    game.trainingPoints = 5;
+    game.lastTrainingWeek = game.league.currentWeek;
+  }
+
+  els.devList.innerHTML = '';
+
+  // Üst başlık: antrenman puanı
+  const header = document.createElement('div');
+  header.className = 'training-header';
+  const lastWeek = game.lastTrainingWeek;
+  const isCurrentWeek = lastWeek === game.league.currentWeek;
+  header.innerHTML = `
+    <div class="th-info">
+      <div class="th-points">
+        <i data-lucide="zap"></i>
+        <strong>${game.trainingPoints}</strong> / 5
+        <span class="muted">Antrenman Puanı (Hafta ${game.league.currentWeek + 1})</span>
+      </div>
+      <div class="th-hint muted">Her oyuncu için +1 puan verebilirsin. Puan haftada yenilenir.</div>
+    </div>
+  `;
+  els.devList.appendChild(header);
+
+  // Pozisyon → antrenman alanları
+  const trainingAreas = {
+    GK: ['reflexes', 'positioning', 'composure', 'passing', 'leadership'],
+    DF: ['tackling', 'marking', 'interception', 'aerial', 'positioning'],
+    OS: ['passing', 'vision', 'decisions', 'dribbling', 'firstTouch'],
+    FV: ['finishing', 'shooting', 'composure', 'pace', 'firstTouch'],
+  };
+  const areaLabels = {
+    passing: 'Pas', shooting: 'Şut', tackling: 'Müdahale', dribbling: 'Dribling',
+    finishing: 'Bitiricilik', crossing: 'Orta', composure: 'Sükunet', vision: 'Vizyon',
+    decisions: 'Karar', firstTouch: 'İlk Dokunuş', reflexes: 'Refleks', agility: 'Çeviklik',
+    pace: 'Hız', longShots: 'Uzun Şut', interception: 'Kesiş', aerial: 'Hava Topu',
+    marking: 'Markaj', positioning: 'Pozisyon', leadership: 'Liderlik',
+    aggression: 'Agresiflik', flair: 'Yaratıcılık',
+  };
+
+  const players = [...user.players].sort(sortByPositionThenName);
+
+  for (const p of players) {
+    const rating = computePlayerRating(p);
+    const potential = p.potential || 80;
+    const pct = Math.min(100, (rating / potential) * 100);
+    const ageCategory = p.age < 23 ? '🟢' : p.age < 28 ? '🔵' : p.age < 32 ? '🟡' : '🔴';
+    const areas = trainingAreas[p.position] || ['passing'];
+    const currentBest = areas.reduce((a, b) => (p.attrs?.[a] || 0) > (p.attrs?.[b] || 0) ? a : b);
+
+    const item = document.createElement('div');
+    item.className = 'dev-item';
+    item.innerHTML = `
+      <div class="p-pos">${p.position}</div>
+      <div class="dev-name-col">
+        <div class="p-name">${p.name} ${ageCategory}</div>
+        <div class="d-bar" style="margin-top: 4px;"><div class="d-bar-fill" style="width: ${pct}%"></div></div>
+      </div>
+      <div class="dev-rating">
+        <div class="dr-num">${rating.toFixed(1)}</div>
+        <div class="dr-max">/ ${potential}</div>
+      </div>
+      <div class="dev-train">
+        <select class="train-area" data-pid="${p.id}">
+          ${areas.map(a => `<option value="${a}" ${a === currentBest ? 'selected' : ''}>${areaLabels[a] || a}</option>`).join('')}
+        </select>
+        <button class="train-btn" data-pid="${p.id}" ${game.trainingPoints <= 0 ? 'disabled' : ''}>
+          <i data-lucide="plus"></i> Antren
+        </button>
+      </div>
+      <div class="dev-meta">
+        <div class="d-meta">${p.age}y · ${p.position}</div>
+        <button class="dev-detail" data-pid="${p.id}"><i data-lucide="info"></i> Detay</button>
+      </div>
+    `;
+    els.devList.appendChild(item);
+  }
+
+  // Event listener'lar
+  els.devList.querySelectorAll('.train-btn').forEach(btn => {
+    btn.addEventListener('click', () => trainPlayer(btn.dataset.pid));
+  });
+  els.devList.querySelectorAll('.dev-detail').forEach(btn => {
+    btn.addEventListener('click', () => showPlayerDetail(btn.dataset.pid));
+  });
+  if (window.lucide) lucide.createIcons();
+}
+
+// Pozisyona özgü rating (ROLE_WEIGHTS kullanarak)
+function computePlayerRating(p) {
+  const attrs = p.attrs || {};
+  const weights = ROLE_WEIGHTS[p.position] || {};
+  let weighted = 0, totalWeight = 0;
+  for (const attr of Object.keys(attrs)) {
+    const w = weights[attr] || 1.0;
+    weighted += attrs[attr] * w;
+    totalWeight += w;
+  }
+  return totalWeight > 0 ? weighted / totalWeight : 50;
+}
+
+function trainPlayer(pid) {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+  const player = user.players.find(p => p.id === pid);
+  if (!player) return;
+  if (game.trainingPoints <= 0) { alert('Antrenman puanın kalmadı!'); return; }
+
+  const select = els.devList.querySelector(`.train-area[data-pid="${pid}"]`);
+  if (!select) return;
+  const attr = select.value;
+  if (!player.attrs) player.attrs = {};
+  const current = player.attrs[attr] || 50;
+  const potential = player.potential || 80;
+
+  if (current >= potential) {
+    alert(`${player.name} bu alanda potansiyel sınırına ulaşmış (${current}/${potential}).`);
+    return;
+  }
+
+  player.attrs[attr] = Math.min(potential, current + 2);
+  game.trainingPoints--;
+  saveGame();
+  renderDevelopmentPage();
+}
+
+function showPlayerDetail(pid) {
+  if (!game) return;
+  const user = getUserTeam();
+  const player = user?.players.find(p => p.id === pid);
+  if (!player) return;
+
+  const areaLabels = {
+    passing: 'Pas', shooting: 'Şut', tackling: 'Müdahale', dribbling: 'Dribling',
+    finishing: 'Bitiricilik', crossing: 'Orta', composure: 'Sükunet', vision: 'Vizyon',
+    decisions: 'Karar', firstTouch: 'İlk Dokunuş', reflexes: 'Refleks', agility: 'Çeviklik',
+    pace: 'Hız', longShots: 'Uzun Şut', interception: 'Kesiş', aerial: 'Hava Topu',
+    marking: 'Markaj', positioning: 'Pozisyon', leadership: 'Liderlik',
+    aggression: 'Agresiflik', flair: 'Yaratıcılık',
+  };
+  const weights = ROLE_WEIGHTS[player.position] || {};
+  const rating = computePlayerRating(player);
+  const potential = player.potential || 80;
+
+  // Tüm attribute'leri göster (ağırlıklı, sıralı)
+  const attrs = Object.entries(player.attrs || {})
+    .map(([k, v]) => ({ k, v, w: weights[k] || 1.0, label: areaLabels[k] || k }))
+    .sort((a, b) => (b.v * b.w) - (a.v * a.w));
+
+  const detail = document.createElement('div');
+  detail.className = 'modal';
+  detail.id = 'player-detail-modal';
+  detail.style.display = 'flex';
+  detail.innerHTML = `
+    <div class="modal-box wide">
+      <div class="modal-icon"><i data-lucide="user"></i></div>
+      <h3>${player.name}</h3>
+      <div class="pd-sub">${player.position} · ${player.age}y · ⭐ ${player.stars || 1}</div>
+      <div class="pd-rating">
+        <div class="pd-rating-num">${rating.toFixed(1)}</div>
+        <div class="pd-rating-max">/ ${potential}</div>
+        <div class="pd-rating-label">Pozisyona Özgü Rating</div>
+      </div>
+      <div class="pd-attrs">
+        ${attrs.map(a => `
+          <div class="pd-attr">
+            <div class="pda-label">${a.label}${a.w > 1.2 ? ' ★' : a.w < 0.9 ? ' ·' : ''}</div>
+            <div class="pda-bar"><div class="pda-fill" style="width: ${(a.v / potential) * 100}%; background: ${a.w > 1.2 ? 'var(--accent)' : a.w < 0.9 ? 'var(--text-faint)' : 'var(--info)'}"></div></div>
+            <div class="pda-val">${a.v}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="modal-actions">
+        <button class="btn primary pd-close">Kapat</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(detail);
+  detail.querySelector('.pd-close').addEventListener('click', () => detail.remove());
+  detail.addEventListener('click', (e) => { if (e.target === detail) detail.remove(); });
+  if (window.lucide) lucide.createIcons();
+}
+
+// === RENDER: TRANSFERS ===
+function renderTransferPage() {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+  els.transferBudget.textContent = formatMoney(user.budget?.budget || 50_000_000);
+  const pos = els.filterPosition.value;
+  const maxAge = parseInt(els.filterAge.value) || 99;
+  const minStars = parseInt(els.filterStars.value) || 0;
+  const filtered = game.transferMarket.players.filter(p =>
+    (!pos || p.position === pos) && p.age <= maxAge && p.stars >= minStars
+  ).sort(sortByPositionThenName);
+  els.transferList.innerHTML = '';
+  for (const p of filtered.slice(0, 40)) {
+    const item = document.createElement('div');
+    item.className = 'transfer-item';
+    item.innerHTML = `
+      <div class="t-pos">${p.position}</div>
+      <div class="p-name" style="font-weight: 500">${p.name}</div>
+      <div class="t-age">${p.age}y</div>
+      <div style="color: var(--accent); font-size: 11px;">${'★'.repeat(p.stars || 1)}</div>
+      <div class="t-value">${formatMoney(p.value)}</div>
+      <button class="btn primary t-buy" data-pid="${p.id}">Al</button>
+    `;
+    item.querySelector('.t-buy').addEventListener('click', () => buyPlayer(p));
+    els.transferList.appendChild(item);
+  }
+}
+
+// === RENDER: MATCH ===
+function renderMatchPage() {
+  if (!match) return;
+  renderScore();
+  renderSquadInMatch();
+}
+
+function renderScore() {
+  if (!match) return;
+  if (els.homeName) els.homeName.textContent = match.home.name;
+  if (els.awayName) els.awayName.textContent = match.away.name;
+  if (els.homeScore) els.homeScore.textContent = match.homeScore;
+  if (els.awayScore) els.awayScore.textContent = match.awayScore;
+  if (els.matchMinute) els.matchMinute.textContent = `${match.minute}'`;
   const homeYellows = match.home.players.filter(p => (p.live?.yellowCount || 0) > 0).length;
   const awayYellows = match.away.players.filter(p => (p.live?.yellowCount || 0) > 0).length;
   const homeReds = match.home.players.filter(p => p.live?.redCard).length;
   const awayReds = match.away.players.filter(p => p.live?.redCard).length;
-
-  els.homePlayers.textContent = homeOnField;
-  els.awayPlayers.textContent = awayOnField;
-  els.homeYellows.textContent = homeYellows;
-  els.awayYellows.textContent = awayYellows;
-  els.homeReds.textContent = homeReds;
-  els.awayReds.textContent = awayReds;
-
+  if (els.homePlayers) els.homePlayers.textContent = match.home.players.filter(p => p.onField).length;
+  if (els.awayPlayers) els.awayPlayers.textContent = match.away.players.filter(p => p.onField).length;
+  if (els.homeYellows) els.homeYellows.textContent = homeYellows;
+  if (els.awayYellows) els.awayYellows.textContent = awayYellows;
+  if (els.homeReds) els.homeReds.textContent = homeReds;
+  if (els.awayReds) els.awayReds.textContent = awayReds;
   if (match.substitution) {
-    els.homeSubs.textContent = match.substitution.getRemainingSubs('home');
-    els.awaySubs.textContent = match.substitution.getRemainingSubs('away');
+    if (els.homeSubs) els.homeSubs.textContent = match.substitution.getRemainingSubs('home');
+    if (els.awaySubs) els.awaySubs.textContent = match.substitution.getRemainingSubs('away');
   }
 }
 
-// === SEARCH ===
-els.search.addEventListener('input', (e) => {
-  searchQuery = e.target.value.trim().toLowerCase();
-  els.searchClear.style.display = searchQuery ? 'flex' : 'none';
-  renderEvents();
-});
-els.searchClear.addEventListener('click', () => {
-  els.search.value = ''; searchQuery = '';
-  els.searchClear.style.display = 'none';
-  renderEvents();
-  els.search.focus();
-});
+function renderSquadInMatch() {
+  // Şu an kullanılmıyor, ama ileride kullanılabilir
+}
 
 function eventMatchesPlayer(ev, query) {
   if (!query) return true;
   const text = (ev.text || '').toLowerCase();
   if (text.includes(query)) return true;
-  for (const team of [HOME, AWAY]) {
+  for (const team of [match?.home, match?.away]) {
     if (!team?.players) continue;
     for (const p of team.players) {
       if (p.name?.toLowerCase().includes(query)) {
-        if (ev.actor === p.id || ev.target === p.id || ev.scorer === p.id || ev.loser === p.id) {
-          return true;
-        }
+        if (ev.actor === p.id || ev.target === p.id || ev.scorer === p.id) return true;
       }
     }
   }
@@ -231,22 +733,16 @@ function eventMatchesPlayer(ev, query) {
 
 function renderEvents() {
   const total = allEvents.length;
-  const filtered = searchQuery
-    ? allEvents.filter(ev => eventMatchesPlayer(ev, searchQuery))
-    : allEvents;
+  const filtered = searchQuery ? allEvents.filter(eventMatchesPlayer) : allEvents;
   els.eventsList.innerHTML = '';
   for (let i = filtered.length - 1; i >= 0; i--) {
     appendEventToList(filtered[i], false);
   }
-  els.eventCount.textContent = searchQuery
-    ? `${filtered.length} / ${total}`
-    : `${total}`;
-  els.searchInfo.textContent = searchQuery
-    ? `Arama: "${searchQuery}"`
-    : '';
+  els.eventCount.textContent = searchQuery ? `${filtered.length} / ${total}` : `${total}`;
+  els.searchInfo.textContent = searchQuery ? `Arama: "${searchQuery}"` : '';
 }
 
-function appendEventToList(ev, prepend = true) {
+function appendEventToList(ev, prepend) {
   const div = document.createElement('div');
   div.className = 'event-item';
   const type = ev.type;
@@ -259,9 +755,9 @@ function appendEventToList(ev, prepend = true) {
   else if (type === 'substitution') typeClass = 'sub';
   else if (type === 'injury') typeClass = 'card';
   div.innerHTML = `
-    <span class="e-min">${ev.minute}'</span>
-    <span class="e-type ${typeClass}">${typeLabel(type, ev.reason)}</span>
-    <span class="e-text">${(ev.text || '').replace(/^\d+'\s*/, '')}</span>
+    <div class="e-min">${ev.minute}'</div>
+    <div class="e-type ${typeClass}">${typeLabel(type, ev.reason)}</div>
+    <div class="e-text">${(ev.text || '').replace(/^\d+'\s*/, '')}</div>
   `;
   if (prepend) {
     els.eventsList.prepend(div);
@@ -294,7 +790,6 @@ function typeLabel(type, reason) {
   return (type || '').toUpperCase().slice(0, 5);
 }
 
-// === NARRATIVE ===
 function appendNarratives(narratives) {
   if (!narratives?.length) return;
   const placeholder = els.narrativeStream.querySelector('.placeholder');
@@ -303,434 +798,644 @@ function appendNarratives(narratives) {
     const div = document.createElement('div');
     const type = n.type || 'sequence';
     div.className = `narrative-item ${type}`;
-    div.innerHTML = `<span class="n-minute">${n.minute}'</span> ${n.text.replace(/^\d+'\s*/, '')}`;
+    div.innerHTML = `<div class="n-minute">${n.minute}'</div> ${n.text.replace(/^\d+'\s*/, '')}`;
     els.narrativeStream.appendChild(div);
   }
   els.narrativeStream.scrollTop = els.narrativeStream.scrollHeight;
 }
 
-// === SIMULATION ===
-function tick() {
-  if (!match || match.minute >= 90) {
-    stopTimer();
-    els.btnStart.disabled = false;
-    els.btnStartLabel.textContent = 'Bitti';
-    if (window.lucide) lucide.createIcons();
-    return;
-  }
-
-  // Sakatlık modalı açıksa maçı duraklat
-  if (matchPausedForInjury) {
-    return;
-  }
-
-  const beforeN = match.narrativeLog.length;
-  const beforeE = match.events.length;
-  simulateMinute(match);
-  const newNarratives = match.narrativeLog.slice(beforeN);
-  const newEvents = match.events.slice(beforeE);
-
-  // Sakatlık kontrolü (Başkan modu + autoSubs=false)
-  for (const ev of newEvents) {
-    if (ev.type === 'injury') {
-      if (mode === 'manager') {
-        // Oyuncuyu çıkar, modal aç
-        const player = match[ev.side]?.players?.find(p => p.id === ev.actor);
-        if (player) {
-          player.onField = false;
-          showInjuryModal(ev.side, player);
-        }
-      }
-    }
-  }
-
-  renderScore();
-  if (mode === 'manager' && userTeam) {
-    renderSquad();
-  }
-  for (const ev of newEvents) {
-    allEvents.push(ev);
-    if (!searchQuery) appendEventToList(ev, true);
-  }
-  els.eventCount.textContent = searchQuery
-    ? `${allEvents.filter(e => eventMatchesPlayer(e, searchQuery)).length} / ${allEvents.length}`
-    : `${allEvents.length}`;
-  if (searchQuery) renderEvents();
-  appendNarratives(newNarratives);
-}
-
-function startTimer() {
-  if (timer) return;
-  timer = setInterval(tick, speed);
-  els.btnPause.disabled = false;
-  els.btnStart.disabled = true;
-  els.btnStartLabel.textContent = 'Devam';
-}
-function stopTimer() {
-  if (timer) clearInterval(timer);
-  timer = null;
-  els.btnPause.disabled = true;
-}
-
-// === SAKATLIK MODAL ===
-function showInjuryModal(side, player) {
-  matchPausedForInjury = true;
-  stopTimer();
-  pendingInjury = { side, player };
-  els.injuryMessage.textContent = `🏥 ${player.name} sakatlandı! Oyunu terk etmek zorunda. Yedek oyunculardan birini seç.`;
-  // Yedekleri göster
-  const team = match[side];
-  const bench = team.players.filter(p => !p.onField && !p.live?.redCard);
-  els.injurySubstitutes.innerHTML = '';
-  if (bench.length === 0) {
-    els.injurySubstitutes.innerHTML = '<p style="color: var(--text-dim); font-size: 12px;">Yedek oyuncu yok, 10 kişi devam.</p>';
-  } else {
-    // Aynı pozisyondan önce
-    bench.sort((a, b) => {
-      const aPos = a.position === player.position ? 0 : 1;
-      const bPos = b.position === player.position ? 0 : 1;
-      return aPos - bPos;
-    });
-    for (const sub of bench.slice(0, 8)) {
-      const item = document.createElement('div');
-      item.className = 'injury-sub-item';
-      item.innerHTML = `
-        <span class="p-pos">${sub.position}</span>
-        <span class="p-name">${sub.name}</span>
-        <span class="p-age">${sub.age}y</span>
-        <span class="p-rating">${(sub.live?.rating || 6.5).toFixed(1)}</span>
-      `;
-      item.addEventListener('click', () => doInjurySubstitution(side, player, sub));
-      els.injurySubstitutes.appendChild(item);
-    }
-  }
-  els.injuryModal.style.display = 'flex';
-  lucide.createIcons();
-}
-
-function doInjurySubstitution(side, outPlayer, inPlayer) {
-  // Manuel değişiklik
-  const sub = match.substitution.manualSub(side, outPlayer.id, inPlayer.id);
-  if (sub.ok) {
-    match.events.push(sub.event);
-    match.narrativeLog.push({ minute: match.minute, type: 'substitution', text: `🔄 Değişiklik: ${outPlayer.name} çıktı, ${inPlayer.name} girdi (Sakatlık).` });
-    appendNarrativeOnly(sub.event.minute, sub.event.text);
-    allEvents.push(sub.event);
-    if (!searchQuery) appendEventToList(sub.event, true);
-  }
-  closeInjuryModal();
-  renderScore();
-  startTimer();
-}
-
-function appendNarrativeOnly(minute, text) {
+function appendNarrativeText(minute, text) {
   const placeholder = els.narrativeStream.querySelector('.placeholder');
   if (placeholder) placeholder.remove();
   const div = document.createElement('div');
-  div.className = 'narrative-item substitution';
-  div.innerHTML = `<span class="n-minute">${minute}'</span> ${text.replace(/^\d+'\s*/, '')}`;
+  div.className = 'narrative-item sequence';
+  div.style.whiteSpace = 'pre-line';
+  div.innerHTML = `<div class="n-minute">${minute}'</div> ${text}`;
   els.narrativeStream.appendChild(div);
   els.narrativeStream.scrollTop = els.narrativeStream.scrollHeight;
 }
 
-function closeInjuryModal() {
-  els.injuryModal.style.display = 'none';
-  matchPausedForInjury = false;
-  pendingInjury = null;
+// === HAFTA OYNA ===
+function playWeek(skip = false) {
+  if (!game) return;
+  const next = game.league.currentWeek + 1;
+  if (next > 34) { endSeason(); return; }
+  stopTimer();
+
+  // AI maçları önce oyna
+  const weekFixtures = game.league.fixtures.filter(f => f.week === next);
+  const aiResults = [];
+  for (const fix of weekFixtures) {
+    if (fix.homeId === 'user' || fix.awayId === 'user') continue;
+    if (fix.played) continue;
+    const home = game.league.teams.find(t => t.id === fix.homeId);
+    const away = game.league.teams.find(t => t.id === fix.awayId);
+    const result = simulateAIMatch(home, away);
+    fix.played = true;
+    fix.result = result;
+    updateStandings(fix);
+    aiResults.push({ home: home.name, away: away.name, homeScore: result.homeScore, awayScore: result.awayScore });
+  }
+
+  // Maaş öde
+  for (const team of game.league.teams) {
+    team.budget.payWeeklyWages(next);
+  }
+
+  game.league.currentWeek = next;
+  saveGame();
+
+  // Kullanıcı maçını başlat
+  startUserMatch(skip);
 }
 
-// === EVENTS ===
-els.btnStart.addEventListener('click', () => {
-  if (!match || match.minute >= 90) newMatch();
-  startTimer();
-});
-els.btnPause.addEventListener('click', () => {
-  if (timer) stopTimer();
-  else if (match && match.minute < 90) startTimer();
-});
-els.btnReset.addEventListener('click', () => {
-  stopTimer();
-  closeInjuryModal();
-  if (mode === 'manager' && userTeam) {
-    newMatch();
-  } else {
-    newMatch();
-  }
-  els.btnStart.disabled = false;
-  els.btnStartLabel.textContent = 'Başlat';
-});
-els.speed.addEventListener('input', (e) => {
-  speed = parseInt(e.target.value);
-  els.speedVal.textContent = `${speed}ms`;
-  if (timer) { clearInterval(timer); timer = setInterval(tick, speed); }
-});
-els.modeSelect.addEventListener('change', (e) => {
-  mode = e.target.value;
-  stopTimer();
-  closeInjuryModal();
-  if (mode === 'manager') {
-    if (!userTeam) initManager();
-    els.managerPanel.style.display = 'flex';
-    newMatch();
-  } else {
-    els.managerPanel.style.display = 'none';
-    newMatch();
-  }
-  lucide.createIcons();
-});
-
-// === MANAGER MODE ===
-async function initManager() {
-  // League modülü zaten match-engine.js'te export edildi
-  const { League } = await import('./js/match-engine.js');
-  league = new League();
-  // Kullanıcı takımı
-  resetNamePool(); resetClubPool();
-  const clubs = generateMatchClubs();
-  userTeam = buildTeam(clubs.home, '442', true);
-  // Yaş/potential ata
-  for (const p of userTeam.players) {
-    p.age = 18 + Math.floor(Math.random() * 18);
-    p.potential = 50 + p.stars * 15 + Math.floor(Math.random() * 10);
-    p.value = 1_000_000 + p.stars * 2_000_000 + Math.floor(Math.random() * 1_000_000);
-    p.wage = 50_000 + p.stars * 50_000;
-  }
-  league.setup(userTeam);
-  renderSquad();
-  renderStandings();
-  renderDevelopment();
-  setupTabs();
-  setupTransfer();
-  setupPlayWeek();
-  loadNextMatch();
+function simulateAIMatch(home, away) {
+  const homeAbility = teamAbility(home);
+  const awayAbility = teamAbility(away);
+  const homeAdv = 1.15;
+  const homeLambda = (homeAbility * 0.04 * homeAdv) / (awayAbility * 0.04 + 0.5);
+  const awayLambda = (awayAbility * 0.04) / (homeAbility * 0.04 * homeAdv + 0.5);
+  return { homeScore: poissonRandom(homeLambda), awayScore: poissonRandom(awayLambda) };
 }
 
-function setupTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-      document.querySelectorAll('.tab-content').forEach(c => {
-        c.style.display = c.dataset.tabContent === tab ? 'block' : 'none';
-        c.classList.toggle('active', c.dataset.tabContent === tab);
-      });
-    });
+function teamAbility(team) {
+  const onField = team.players.filter(p => p.onField);
+  if (!onField.length) return 60;
+  const sum = onField.reduce((s, p) => {
+    const attrs = p.attrs || {};
+    const avg = Object.values(attrs).reduce((a, b) => a + b, 0) / Math.max(1, Object.keys(attrs).length);
+    return s + avg;
+  }, 0);
+  return sum / onField.length;
+}
+
+function poissonRandom(lambda) {
+  const L = Math.exp(-lambda);
+  let k = 0, p = 1;
+  do { k++; p *= Math.random(); } while (p > L);
+  return k - 1;
+}
+
+function updateStandings(fix) {
+  const home = game.league.teams.find(t => t.id === fix.homeId);
+  const away = game.league.teams.find(t => t.id === fix.awayId);
+  if (!home || !away || !fix.result) return;
+  home.played++; away.played++;
+  home.gf += fix.result.homeScore; home.ga += fix.result.awayScore;
+  away.gf += fix.result.awayScore; away.ga += fix.result.homeScore;
+  if (fix.result.homeScore > fix.result.awayScore) {
+    home.won++; home.points += 3; home.budget.receiveMatchIncome(fix.week, true);
+    away.lost++;
+  } else if (fix.result.homeScore < fix.result.awayScore) {
+    away.won++; away.points += 3; away.budget.receiveMatchIncome(fix.week, true);
+    home.lost++;
+  } else {
+    home.drawn++; home.points += 1; home.budget.receiveMatchIncome(fix.week, false);
+    away.drawn++; away.points += 1; away.budget.receiveMatchIncome(fix.week, false);
+  }
+}
+
+// === KULLANICI MAÇI ===
+function startUserMatch(skip = false) {
+  if (!game) return;
+  const fix = getUserMatchThisWeek();
+  if (!fix) return;
+  const user = getUserTeam();
+  const opp = getOpponentTeam();
+  if (!user || !opp) return;
+
+  resetOnFieldForMatch(opp);
+  const homeTeam = fix.homeId === 'user' ? user : opp;
+  const awayTeam = fix.homeId === 'user' ? opp : user;
+  selectedInMatch = fix.homeId === 'user' ? 'home' : 'away';
+
+  match = makeMatchState({
+    home: homeTeam, away: awayTeam,
+    homeFormation: '442', awayFormation: '442',
   });
+  match.mode = 'manager';
+  startMatchOrig(match);
+
+  allEvents = [];
+  els.narrativeStream.innerHTML = '';
+  els.eventsList.innerHTML = '';
+  els.eventCount.textContent = '0';
+  matchStartTime = Date.now();
+  matchSecondsElapsed = 0;
+
+  if (skip) {
+    // Skip: tüm maçı hızlı simüle et
+    runFullMatch();
+  } else {
+    // Normal: 3 dakika canlı
+    navigate('/match');
+    renderScore();
+    startTimer();
+  }
 }
 
-function renderSquad() {
-  if (!userTeam) return;
-  // İlk 11
-  els.lineupList.innerHTML = '';
-  const lineup = userTeam.players.filter(p => p.onField);
+function resetOnFieldForMatch(team) {
+  for (const p of team.players) {
+    p.live = p.live || {};
+    p.live.currentStamina = 100;
+    p.live.yellowCount = 0;
+    p.live.redCard = false;
+    p.live.injured = false;
+  }
+  const lineup = team.players.slice(0, 11);
+  const used = new Set();
+  for (const p of lineup) { p.onField = true; used.add(p.id); }
+  for (const p of team.players) { if (!used.has(p.id)) p.onField = false; }
+}
+
+// Her tick 100ms = 0.1s maç zamanı, 90 maç dakikası = 180s = 1800 tick
+// Her tick 1 maç dakikası yapsın, ama 100ms aralık = 9s = 90 maç dakikası, ama biz 3 dakika istiyoruz
+// 90 dakika / 180s = 0.5 maç dakikası/saniye
+function tick() {
+  if (!match || match.minute >= 90) {
+    stopTimer();
+    if (match) endUserMatch();
+    return;
+  }
+  // Her tick 0.5 maç dakikası (sabit hız)
+  matchSecondsElapsed = (Date.now() - matchStartTime) / 1000;
+  const realMinute = Math.min(90, (matchSecondsElapsed / MATCH_DURATION_SEC) * 90);
+
+  // Kaç tick'lik dakika geçti?
+  const oldMinute = match.minute;
+  while (match.minute < Math.floor(realMinute)) {
+    const beforeN = match.narrativeLog.length;
+    const beforeE = match.events.length;
+    simulateMinute(match);
+    const newNarratives = match.narrativeLog.slice(beforeN);
+    const newEvents = match.events.slice(beforeE);
+    for (const ev of newEvents) {
+      allEvents.push(ev);
+      if (!searchQuery) appendEventToList(ev, true);
+    }
+    els.eventCount.textContent = searchQuery
+      ? `${allEvents.filter(eventMatchesPlayer).length} / ${allEvents.length}`
+      : `${allEvents.length}`;
+    if (searchQuery) renderEvents();
+    appendNarratives(newNarratives);
+  }
+
+  // Progress bar
+  const pct = Math.min(100, (realMinute / 90) * 100);
+  els.progressFill.style.width = `${pct}%`;
+  els.progressText.textContent = `${Math.floor(pct)}%`;
+
+  // Devre arası: 45. dakikada bir kere +3 değişiklik hakkı
+  if (match.minute >= 45 && match.substitution && !match._halftimeGranted) {
+    match.substitution.grantExtraSubs('home', 3);
+    match.substitution.grantExtraSubs('away', 3);
+    match._halftimeGranted = true;
+    const htMsg = '⏸ Devre arası! Her takıma +3 değişiklik hakkı tanındı (toplam 6).';
+    appendNarrativeText(45, htMsg);
+  }
+
+  renderScore();
+
+  if (match.minute >= 90) {
+    stopTimer();
+    endUserMatch();
+  }
+}
+
+// Skip: tüm maçı 5 saniyede bitir
+function runFullMatch() {
+  if (!match) return;
+  const targetMinute = 90;
+  const stepMs = 30; // her step 30ms
+  const minutesPerStep = 1;
+  let cur = match.minute;
+
+  function step() {
+    if (cur >= targetMinute || !match) {
+      finishMatch();
+      return;
+    }
+    const beforeN = match.narrativeLog.length;
+    const beforeE = match.events.length;
+    simulateMinute(match);
+    cur = match.minute;
+    const newNarratives = match.narrativeLog.slice(beforeN);
+    const newEvents = match.events.slice(beforeE);
+    for (const ev of newEvents) {
+      allEvents.push(ev);
+    }
+    appendNarratives(newNarratives);
+    setTimeout(step, stepMs);
+  }
+  step();
+}
+
+function finishMatch() {
+  if (!match) return;
+  const pct = 100;
+  els.progressFill.style.width = `${pct}%`;
+  els.progressText.textContent = `100%`;
+  endUserMatch();
+}
+
+function startTimer() {
+  if (timer) return;
+  matchStartTime = Date.now();
+  timer = setInterval(tick, TICK_INTERVAL_MS);
+}
+
+function stopTimer() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
+function endUserMatch() {
+  stopTimer();
+  const fix = getUserMatchThisWeek();
+  if (fix && match) {
+    fix.played = true;
+    fix.result = { homeScore: match.homeScore, awayScore: match.awayScore };
+    updateStandings(fix);
+    game.league.currentWeek += 1;
+    saveGame();
+  }
+  // Report sayfası
+  lastReport = { match, fix };
+  setTimeout(() => navigate('/report'), 500);
+}
+
+// === MAÇ RAPORU ===
+function renderReport() {
+  if (!lastReport) { navigate('/'); return; }
+  const { match: m, fix } = lastReport;
+  const userIsHome = fix.homeId === 'user';
+  const userScore = userIsHome ? m.homeScore : m.awayScore;
+  const oppScore = userIsHome ? m.awayScore : m.homeScore;
+
+  els.repHome.textContent = m.home.name;
+  els.repAway.textContent = m.away.name;
+  els.repHomeScore.textContent = m.homeScore;
+  els.repAwayScore.textContent = m.awayScore;
+  els.repMeta.textContent = `Hafta ${fix.week} · Sezon ${game.league.season}`;
+
+  let resultClass = 'draw', resultText = 'Beraberlik';
+  if (userScore > oppScore) { resultClass = ''; resultText = 'Galibiyet'; }
+  else if (userScore < oppScore) { resultClass = 'lost'; resultText = 'Mağlubiyet'; }
+  els.repResultText.className = `fs-result ${resultClass}`;
+  els.repResultText.textContent = resultText;
+
+  // İstatistikler
+  const stats = m.stats || {};
+  const total = (s) => (s?.home || 0) + (s?.away || 0);
+  const pct = (s) => total(s) > 0 ? Math.round((s.home / total(s)) * 100) : 50;
+
+  const statItems = [
+    { label: 'Top Hakimiyeti', key: 'possession', fmt: '%' },
+    { label: 'Şut', key: 'shots' },
+    { label: 'İsabetli Şut', key: 'shotsOnTarget' },
+    { label: 'Korner', key: 'corners' },
+    { label: 'Pas', key: 'passesCompleted' },
+    { label: 'Faul', key: 'fouls' },
+    { label: 'Ofsayt', key: 'offsides' },
+    { label: 'Sarı Kart', key: 'yellowCards' },
+    { label: 'Kırmızı Kart', key: 'redCards' },
+  ];
+
+  els.statsGrid.innerHTML = '';
+  for (const item of statItems) {
+    const s = stats[item.key] || { home: 0, away: 0 };
+    let homeVal, awayVal, homePct, awayPct;
+    if (item.fmt === '%') {
+      homeVal = pct(s) + '%';
+      awayVal = (100 - pct(s)) + '%';
+      homePct = pct(s);
+      awayPct = 100 - pct(s);
+    } else {
+      homeVal = s.home;
+      awayVal = s.away;
+      const tot = (s.home || 0) + (s.away || 0);
+      homePct = tot > 0 ? (s.home / tot) * 100 : 50;
+      awayPct = tot > 0 ? (s.away / tot) * 100 : 50;
+    }
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    row.innerHTML = `
+      <div class="stat-val left">${homeVal}</div>
+      <div class="stat-label">${item.label}</div>
+      <div class="stat-val right">${awayVal}</div>
+      <div class="stat-bar" style="grid-column: 1/-1; margin-top: -8px;">
+        <div class="stat-bar-fill home" style="width: ${homePct}%"></div>
+      </div>
+    `;
+    els.statsGrid.appendChild(row);
+  }
+
+  // Play-by-play timeline
+  els.playTimeline.innerHTML = '';
+  const playEvents = (m.events || []).filter(e => ['goal', 'yellow_card', 'red_card', 'injury', 'substitution', 'kickoff', 'shoot'].includes(e.type) || e.reason === 'sut_isabetsiz' || e.reason === 'kaleciKurtardi');
+  for (const ev of playEvents) {
+    const item = document.createElement('div');
+    const t = ev.type;
+    let cls = 'kp', icon = '•';
+    if (t === 'goal') { cls = 'goal'; icon = '⚽'; }
+    else if (t === 'yellow_card') { cls = 'yellow'; icon = '🟨'; }
+    else if (t === 'red_card') { cls = 'red'; icon = '🟥'; }
+    else if (t === 'injury') { cls = 'injury'; icon = '🏥'; }
+    else if (t === 'substitution') { cls = 'sub'; icon = '🔄'; }
+    else if (t === 'shoot' || ev.reason === 'sut_isabetsiz' || ev.reason === 'kaleciKurtardi') { cls = 'kp'; icon = '🥅'; }
+    else if (t === 'kickoff') { cls = 'kp'; icon = '▶'; }
+    item.className = `tl-item ${cls}`;
+    const text = (ev.text || '').replace(/^\d+'\s*/, '');
+    item.innerHTML = `
+      <div class="tl-min">${ev.minute}'</div>
+      <div class="tl-icon">${icon}</div>
+      <div class="tl-text">${text}</div>
+    `;
+    els.playTimeline.appendChild(item);
+  }
+  if (playEvents.length === 0) {
+    els.playTimeline.innerHTML = '<div class="empty">Önemli olay yok.</div>';
+  }
+
+  if (game.league.currentWeek >= 34) {
+    els.btnNextWeek.style.display = 'none';
+  } else {
+    els.btnNextWeek.style.display = 'inline-flex';
+  }
+}
+
+// === DEĞİŞİKLİK ===
+let pendingSub = { outPlayer: null, inPlayer: null };
+
+function openSubModal(preSelected, isBench) {
+  if (!game) return;
+  const user = getUserTeam();
+  if (!user) return;
+
+  const lineup = user.players.filter(p => p.onField && !p.live?.redCard);
+  const bench = user.players.filter(p => !p.onField && !p.live?.redCard);
+
+  pendingSub = { outPlayer: preSelected || null, inPlayer: null };
+
+  const remaining = match?.substitution?.getRemainingSubs?.('home') ?? 3;
+  const max = match?.substitution?.substitutions?.home?.limit || 3;
+
+  if (!match) {
+    // Maç dışında, basit takas (hiçbir kısıtlama yok)
+    renderSubModal(lineup, bench, null, null);
+  } else {
+    renderSubModal(lineup, bench, remaining, max);
+  }
+
+  els.subModal.style.display = 'flex';
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderSubModal(lineup, bench, remaining, max) {
+  // Sahadaki oyuncular
+  els.subOutList.innerHTML = '';
   for (const p of lineup) {
     const item = document.createElement('div');
-    item.className = 'player-item';
-    if (p.live?.injured) item.classList.add('injured');
+    item.className = 'sub-player' + (pendingSub.outPlayer?.id === p.id ? ' selected' : '');
+    item.dataset.id = p.id;
     item.innerHTML = `
-      <span class="p-pos">${p.position}</span>
-      <span class="p-name">${p.name}</span>
-      <span class="p-age">${p.age}y</span>
-      <span class="p-rating">${(p.live?.rating || 6.5).toFixed(1)}</span>
+      <div class="sp-name"><span class="sp-pos">${p.position}</span>${p.name}</div>
+      <div class="sp-meta">${p.age}y · ${(p.live?.rating || 6.5).toFixed(1)} ⭐</div>
     `;
-    els.lineupList.appendChild(item);
+    item.addEventListener('click', () => {
+      pendingSub.outPlayer = p;
+      renderSubModal(lineup, bench, remaining, max);
+    });
+    els.subOutList.appendChild(item);
   }
-  // Yedek
-  els.benchList.innerHTML = '';
-  const bench = userTeam.players.filter(p => !p.onField);
+
+  // Yedek oyuncular
+  els.subInList.innerHTML = '';
   for (const p of bench) {
     const item = document.createElement('div');
-    item.className = 'player-item bench';
+    item.className = 'sub-player' + (pendingSub.inPlayer?.id === p.id ? ' selected' : '');
+    item.dataset.id = p.id;
     item.innerHTML = `
-      <span class="p-pos">${p.position}</span>
-      <span class="p-name">${p.name}</span>
-      <span class="p-age">${p.age}y</span>
-      <span class="p-rating">${(p.live?.rating || 6.5).toFixed(1)}</span>
+      <div class="sp-name"><span class="sp-pos">${p.position}</span>${p.name}</div>
+      <div class="sp-meta">${p.age}y · ${(p.live?.rating || 6.5).toFixed(1)} ⭐</div>
     `;
-    els.benchList.appendChild(item);
+    item.addEventListener('click', () => {
+      pendingSub.inPlayer = p;
+      renderSubModal(lineup, bench, remaining, max);
+    });
+    els.subInList.appendChild(item);
   }
-  // Bütçe + hafta
-  els.budgetAmount.textContent = formatMoney(userTeam.budget?.budget || 50_000_000);
-  els.transferBudget.textContent = formatMoney(userTeam.budget?.budget || 50_000_000);
-  els.currentWeek.textContent = league?.currentWeek || 1;
-  // Puan
-  const standings = league?.getStandings() || [];
-  const userStanding = standings.find(s => s.isUser);
-  if (userStanding) {
-    els.userPoints.textContent = userStanding.points;
-    els.userRank.textContent = userStanding.pos;
+
+  if (lineup.length === 0) els.subOutList.innerHTML = '<p class="muted" style="grid-column: 1/-1; font-size: 12px;">Sahada oyuncu yok.</p>';
+  if (bench.length === 0) els.subInList.innerHTML = '<p class="muted" style="grid-column: 1/-1; font-size: 12px;">Yedek oyuncu yok.</p>';
+
+  // Mesaj ve onay
+  const oldName = pendingSub.outPlayer?.name || '—';
+  const newName = pendingSub.inPlayer?.name || '—';
+  els.subMessage.textContent = pendingSub.outPlayer
+    ? `${oldName} çıkıyor, ${newName} giriyor.`
+    : 'Sahadan çıkacak oyuncuyu seç.';
+
+  // Footer (kalan haklar + onay)
+  let footer = els.subModal.querySelector('.sub-footer');
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.className = 'sub-footer';
+    els.subModal.querySelector('.modal-box').insertBefore(footer, els.subModal.querySelector('.modal-actions'));
   }
+  const remainingText = remaining !== null
+    ? `Kalan değişiklik: <strong>${remaining}</strong>${max > 3 ? ' / ' + max + ' (devre arası +3)' : ' / ' + max}`
+    : 'Maç dışı — sınırsız';
+  footer.innerHTML = `
+    <div class="sub-remaining">${remainingText}</div>
+    <button class="sub-confirm" id="btn-sub-confirm" ${(pendingSub.outPlayer && pendingSub.inPlayer) ? '' : 'disabled'}>
+      ${pendingSub.outPlayer?.name || '—'} ⟷ ${pendingSub.inPlayer?.name || '—'} · Değiştir
+    </button>
+  `;
+  footer.querySelector('#btn-sub-confirm').addEventListener('click', confirmSubstitution);
 }
 
-function formatMoney(amount) {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M €`;
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}K €`;
-  return `${amount} €`;
-}
-
-function renderStandings() {
-  if (!league) return;
-  const standings = league.getStandings();
-  els.standingsList.innerHTML = '';
-  for (const s of standings) {
-    const row = document.createElement('div');
-    row.className = 'standing-row' + (s.isUser ? ' user' : '');
-    row.innerHTML = `
-      <span class="s-pos">${s.pos}</span>
-      <span class="s-name">${s.name}</span>
-      <span class="s-gd">${s.gd >= 0 ? '+' : ''}${s.gd}</span>
-      <span class="s-points">${s.points}</span>
-    `;
-    els.standingsList.appendChild(row);
+function confirmSubstitution() {
+  if (!pendingSub.outPlayer || !pendingSub.inPlayer) return;
+  const user = getUserTeam();
+  if (!user) return;
+  if (user.id !== (match?.home?.id === user.id ? 'home' : 'away') && match) {
+    // sadece kendi maçında değişiklik
   }
-}
 
-function renderDevelopment() {
-  if (!userTeam) return;
-  const players = [...userTeam.players].sort((a, b) => (a.live?.rating || 0) - (b.live?.rating || 0));
-  els.devList.innerHTML = '';
-  for (const p of players) {
-    const item = document.createElement('div');
-    item.className = 'player-item';
-    const currentAbility = Object.values(p.attrs || {}).reduce((s, v) => s + v, 0) / Math.max(1, Object.keys(p.attrs).length);
-    const potential = p.potential || 80;
-    const progress = Math.max(0, Math.min(100, ((currentAbility - 40) / (potential - 40)) * 100));
-    item.innerHTML = `
-      <span class="p-pos">${p.position}</span>
-      <span class="p-name">${p.name}</span>
-      <span class="p-age">${p.age}y</span>
-      <span class="p-rating" style="color: var(--text); font-size: 10px;">${currentAbility.toFixed(0)}/${potential}</span>
-    `;
-    els.devList.appendChild(item);
-  }
-}
-
-function loadNextMatch() {
-  if (!league) return;
-  const next = league.getUserMatch(league.currentWeek + 1);
-  if (next) {
-    const home = league.teams.find(t => t.id === next.homeId);
-    const away = league.teams.find(t => t.id === next.awayId);
-    els.nextHome.textContent = home?.name || '—';
-    els.nextAway.textContent = away?.name || '—';
-  }
-}
-
-function setupTransfer() {
-  if (!userTeam) return;
-  const market = userTeam.transferMarket || (userTeam.transferMarket = { players: [] });
-  // Piyasa henüz yoksa üret
-  if (!market.players.length) {
-    // Basit piyasa
-    const sizes = [
-      { count: 2, stars: 3, minAge: 24, maxAge: 32 },
-      { count: 4, stars: 2, minAge: 22, maxAge: 30 },
-      { count: 6, stars: 1, minAge: 18, maxAge: 23 },
-    ];
-    market.players = [];
-    resetNamePool();
-    for (const size of sizes) {
-      for (let i = 0; i < size.count; i++) {
-        const team = buildTeam('Market', '442', true);
-        const p = team.players[0];
-        p.age = size.minAge + Math.floor(Math.random() * (size.maxAge - size.minAge));
-        p.stars = size.stars;
-        p.potential = 50 + size.stars * 15 + Math.floor(Math.random() * 10);
-        p.value = 1_000_000 + p.stars * 2_000_000 + Math.floor(Math.random() * 3_000_000);
-        p.wage = 50_000 + p.stars * 50_000;
-        p.live = p.live || { x: 50, y: 35, currentStamina: 100, rating: 6.5 };
-        p.live.rating = 6.0 + size.stars + Math.random() * 0.5;
-        market.players.push(p);
-      }
+  if (match?.substitution) {
+    const side = 'home'; // biz her zaman home'uz (kullanıcı tarafı)
+    const result = match.substitution.manualSub(side, pendingSub.outPlayer.id, pendingSub.inPlayer.id);
+    if (!result.ok) {
+      alert(result.reason);
+      return;
     }
+    match.events.push(result.event);
+    match.narrativeLog.push({
+      minute: match.minute,
+      type: 'substitution',
+      text: `Değişiklik: ${pendingSub.outPlayer.name} çıktı, ${pendingSub.inPlayer.name} girdi.`
+    });
+    appendNarratives([{ minute: match.minute, type: 'substitution', text: `Değişiklik: ${pendingSub.outPlayer.name} çıktı, ${pendingSub.inPlayer.name} girdi.` }]);
+    allEvents.push(result.event);
+    if (!searchQuery) appendEventToList(result.event, true);
+  } else {
+    // Maç dışı, basit takas
+    pendingSub.outPlayer.onField = false;
+    pendingSub.inPlayer.onField = true;
   }
-  renderTransferList();
 
-  // Filtreler
-  const updateList = () => renderTransferList();
-  els.filterPosition.addEventListener('change', updateList);
-  els.filterAge.addEventListener('change', updateList);
-  els.filterStars.addEventListener('change', updateList);
+  closeSubModal();
+  renderScore();
+  renderSquad();
+  renderSquadInMatch();
+  if (window.lucide) lucide.createIcons();
 }
 
-function renderTransferList() {
-  if (!userTeam?.transferMarket) return;
-  const market = userTeam.transferMarket;
-  const pos = els.filterPosition.value;
-  const maxAge = parseInt(els.filterAge.value) || 99;
-  const minStars = parseInt(els.filterStars.value) || 0;
-
-  const filtered = market.players.filter(p =>
-    (!pos || p.position === pos) &&
-    p.age <= maxAge &&
-    p.stars >= minStars
-  );
-
-  els.transferList.innerHTML = '';
-  for (const p of filtered.slice(0, 30)) {
-    const item = document.createElement('div');
-    item.className = 'transfer-item';
-    item.innerHTML = `
-      <span class="t-pos">${p.position}</span>
-      <span class="t-name">${p.name}</span>
-      <span class="t-age">${p.age}y</span>
-      <span class="t-value">${formatMoney(p.value)}</span>
-      <button class="btn t-buy" data-pid="${p.id}">Al</button>
-    `;
-    item.querySelector('.t-buy').addEventListener('click', () => buyPlayer(p));
-    els.transferList.appendChild(item);
-  }
-  lucide.createIcons();
+function closeSubModal() {
+  els.subModal.style.display = 'none';
+  pendingSub = { outPlayer: null, inPlayer: null };
 }
 
+els.btnSubCancel?.addEventListener('click', closeSubModal);
+els.btnSubInMatch?.addEventListener('click', () => {
+  if (!match) { navigate('/squad'); return; }
+  openSubModal(null, false);
+});
+
+// Sakatlık bildirimi
+function showInjuryNotice(player) {
+  if (!els.injuryNoticeModal) return;
+  els.injuryNoticeMessage.textContent = `${player.name} sakatlandı! Oyunu terk etmek zorunda. Otomatik değişiklik yapılmadı.`;
+  els.injuryNoticeModal.style.display = 'flex';
+  if (window.lucide) lucide.createIcons();
+}
+
+els.btnInjuryOk?.addEventListener('click', () => {
+  els.injuryNoticeModal.style.display = 'none';
+});
+
+// === TRANSFER ===
 function buyPlayer(p) {
-  if (!userTeam || !userTeam.budget) return;
-  if (userTeam.budget.budget < p.value) {
+  const user = getUserTeam();
+  if (!user || !user.budget) return;
+  if (user.budget.budget < p.value) {
     alert('Yetersiz bütçe!');
     return;
   }
-  if (confirm(`${p.name} için ${formatMoney(p.value)} ödeyeceksin. Kabul?`)) {
-    userTeam.budget.spendTransfer(p.value, p.name, league?.currentWeek || 1);
-    p.id = `user_${p.id}`;
-    p.onField = false;
-    userTeam.players.push(p);
-    const idx = userTeam.transferMarket.players.findIndex(x => x.id === p.id || x === p);
-    if (idx >= 0) userTeam.transferMarket.players.splice(idx, 1);
-    renderSquad();
-    renderTransferList();
-    lucide.createIcons();
-  }
+  if (!confirm(`${p.name} için ${formatMoney(p.value)} ödeyeceksin. Kabul?`)) return;
+  user.budget.spendTransfer(p.value, p.name, game.league.currentWeek);
+  p.id = `user_${p.id}_${Date.now()}`;
+  p.onField = false;
+  user.players.push(p);
+  const idx = game.transferMarket.players.findIndex(x => x === p);
+  if (idx >= 0) game.transferMarket.players.splice(idx, 1);
+  saveGame();
+  applyRoute();
+  if (window.lucide) lucide.createIcons();
 }
 
-function setupPlayWeek() {
-  els.btnPlayWeek.addEventListener('click', () => {
-    if (!league) return;
-    const next = league.currentWeek + 1;
-    if (next > 34) {
-      alert('Sezon bitti! Yeni sezon başlatılıyor...');
-      league.endSeason();
-      league.currentWeek = 0;
-      return;
-    }
-    const result = league.playWeek(next, (fix) => {
-      // Kullanıcı maçı başladı, simülasyonu başlat
-      newMatch();
-      startTimer();
-      return { score: { home: 0, away: 0 } }; // gerçek skor maç bitince güncellenecek
-    });
-    if (result) {
-      renderSquad();
-      renderStandings();
-      loadNextMatch();
-      // AI maç sonuçlarını göster
-      if (result.aiMatches?.length) {
-        console.log('AI matches:', result.aiMatches);
+// === SEZON SONU ===
+function endSeason() {
+  if (!game) return;
+  for (const team of game.league.teams) {
+    for (const p of team.players) {
+      const age = p.age || 25;
+      let delta = 0;
+      if (age < 23) delta = 0.5;
+      else if (age < 28) delta = 0.1;
+      else if (age < 32) delta = -0.3;
+      else delta = -0.7;
+      const attrs = p.attrs || {};
+      for (const key in attrs) {
+        attrs[key] = Math.max(20, Math.min(p.potential || 90, attrs[key] + delta));
       }
+      p.age = age + 1;
     }
-  });
+  }
+  game.league.season += 1;
+  game.league.currentWeek = 0;
+  const { League } = window.__NS;
+  const oldUserTeam = getUserTeam();
+  game.league = new League();
+  game.league.userTeamId = 'user';
+  const newUserTeam = buildTeam(oldUserTeam.name, '442', true);
+  newUserTeam.players = oldUserTeam.players.map(p => ({ ...p, onField: false, live: { ...p.live, currentStamina: 100, yellowCount: 0, redCard: false, injured: false, rating: 6.5 } }));
+  newUserTeam.budget = oldUserTeam.budget;
+  game.league.setup(newUserTeam);
+  saveGame();
+  applyRoute();
+  alert(`🎉 Sezon ${game.league.season - 1} tamamlandı!\nYeni sezon başladı. Tüm oyuncular yaşlandı, yetenekler güncellendi.`);
 }
+
+// === EVENTS ===
+els.btnPlayWeek.addEventListener('click', () => playWeek(false));
+els.btnReset.addEventListener('click', () => {
+  if (confirm('Yeni sezon başlatılsın mı? Tüm ilerleme sıfırlanacak.')) {
+    localStorage.removeItem(STORAGE_KEY);
+    newGame();
+  }
+});
+els.btnSkipMatch.addEventListener('click', () => {
+  if (match) {
+    stopTimer();
+    runFullMatch();
+  }
+});
+els.btnBackHome.addEventListener('click', () => navigate('/'));
+els.btnNextWeek.addEventListener('click', () => playWeek(false));
+
+els.search.addEventListener('input', (e) => {
+  searchQuery = e.target.value.trim().toLowerCase();
+  els.searchClear.style.display = searchQuery ? 'flex' : 'none';
+  renderEvents();
+});
+els.searchClear.addEventListener('click', () => {
+  els.search.value = ''; searchQuery = '';
+  els.searchClear.style.display = 'none';
+  renderEvents();
+  els.search.focus();
+});
+
+els.filterPosition.addEventListener('change', renderTransferPage);
+els.filterAge.addEventListener('change', renderTransferPage);
+els.filterStars.addEventListener('change', renderTransferPage);
 
 // === INIT ===
-els.speedVal.textContent = `${speed}ms`;
-els.searchClear.style.display = 'none';
-newMatch();
+import('./js/match-engine.js').then(mod => {
+  window.__NS = { League: mod.League };
+  const saved = loadGame();
+  if (saved) {
+    const league = new mod.League();
+    league.currentWeek = saved.league.currentWeek;
+    league.season = saved.league.season;
+    league.userTeamId = 'user';
+    league.teams = saved.league.teams.map(t => {
+      t.budget = { budget: t.budget.budget, history: t.budget.history || [], weeklyWages: 0, payWeeklyWages() { return { ok: true }; }, receiveMatchIncome(w, won) { this.budget += won ? 300000 : 200000; } };
+      return t;
+    });
+    league.fixtures = saved.league.fixtures;
+    game = { league, transferMarket: saved.transferMarket };
+    game.trainingPoints = saved.trainingPoints ?? 5;
+    game.lastTrainingWeek = saved.lastTrainingWeek ?? -1;
+  } else {
+    resetNamePool();
+    resetClubPool();
+    const league = new mod.League();
+    const userClub = generateUniqueClubName();
+    const userTeam = buildTeam(userClub, '442', true);
+    for (const p of userTeam.players) {
+      p.age = 18 + Math.floor(Math.random() * 18);
+      p.potential = 50 + p.stars * 15 + Math.floor(Math.random() * 10);
+      p.value = 1_000_000 + p.stars * 2_000_000 + Math.floor(Math.random() * 1_000_000);
+      p.wage = 50_000 + p.stars * 50_000;
+    }
+    league.setup(userTeam);
+    league.userTeamId = 'user';
+    deployLineupToTeam(userTeam);
+    game = { league, transferMarket: generateMarket(), trainingPoints: 5, lastTrainingWeek: -1 };
+    saveGame();
+  }
+  els.searchClear.style.display = 'none';
+  applyRoute();
+});

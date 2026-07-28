@@ -2129,10 +2129,14 @@ var SubstitutionEngine = class {
     return this.match[side]?.players?.find((p) => p.id === id || p.name === id) || null;
   }
   getRemainingSubs(side) {
-    return Math.max(0, MAX_SUBSTITUTIONS - this.substitutions[side].used);
+    return Math.max(0, (this.substitutions[side].limit || MAX_SUBSTITUTIONS) - this.substitutions[side].used);
   }
   getSubHistory(side) {
     return this.substitutions[side].history;
+  }
+  // Devre arası: +3 ek değişiklik hakkı
+  grantExtraSubs(side, count = 3) {
+    this.substitutions[side].limit = (this.substitutions[side].limit || MAX_SUBSTITUTIONS) + count;
   }
 };
 function createSubstitution(match, options) {

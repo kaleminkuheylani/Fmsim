@@ -4,7 +4,7 @@
 // Kullanım:
 //   import { pick, getComment, all } from './commentlib/index.js';
 //   const tpl = pick('attack.finalBall');
-//   const text = fillTemplate(tpl, { team: 'Galatasaray', actor: 'Icardi' });
+//   const text = fillTemplate(tpl, { team: 'Takım', actor: 'Oyuncu' });
 //
 // Veya alt kategoriden:
 //   const tpl = pick('attack.left');

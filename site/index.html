@@ -1,211 +1,383 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Narrative Spiker</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Narrative Spiker · Başkan Modu</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://unpkg.com/lucide@1.22.0/dist/umd/lucide.min.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <i data-lucide="mic" class="brand-icon"></i>
-      <h1>Narrative Spiker</h1>
-    </div>
-    <div class="score-mini">
-      <span class="team home"><span id="home-name">—</span> <strong id="home-score">0</strong></span>
-      <span class="dot">·</span>
-      <span class="minute" id="match-minute">0'</span>
-      <span class="dot">·</span>
-      <span class="team away"><strong id="away-score">0</strong> <span id="away-name">—</span></span>
-    </div>
-    <div class="status-mini">
-      <span class="stat" title="Ev sahibi oyuncu"><i data-lucide="users"></i> <span id="home-players">11</span></span>
-      <span class="stat" title="Ev sahibi değişiklik"><i data-lucide="refresh-cw"></i> <span id="home-subs">3</span></span>
-      <span class="stat" title="Ev sahibi sarı kart"><span class="card-y">🟨</span> <span id="home-yellows">0</span></span>
-      <span class="stat" title="Ev sahibi kırmızı kart"><span class="card-r">🟥</span> <span id="home-reds">0</span></span>
-      <span class="stat-sep"></span>
-      <span class="stat" title="Deplasman oyuncu"><i data-lucide="users"></i> <span id="away-players">11</span></span>
-      <span class="stat" title="Deplasman değişiklik"><i data-lucide="refresh-cw"></i> <span id="away-subs">3</span></span>
-      <span class="stat" title="Deplasman sarı kart"><span class="card-y">🟨</span> <span id="away-yellows">0</span></span>
-      <span class="stat" title="Deplasman kırmızı kart"><span class="card-r">🟥</span> <span id="away-reds">0</span></span>
-    </div>
-    <div class="controls">
-      <select id="mode-select" class="mode-select" title="Oyun modu">
-        <option value="normal">⚡ Normal</option>
-        <option value="manager">👔 Başkan</option>
-      </select>
-      <button id="btn-start" class="btn primary">
-        <i data-lucide="play"></i> <span id="btn-start-label">Başlat</span>
-      </button>
-      <button id="btn-pause" class="btn ghost" disabled>
-        <i data-lucide="pause"></i>
-      </button>
-      <button id="btn-reset" class="btn ghost">
-        <i data-lucide="rotate-ccw"></i>
-      </button>
-      <div class="speed-control">
-        <i data-lucide="zap"></i>
-        <input id="speed" type="range" min="10" max="1000" value="100" step="10" />
-        <span id="speed-val">100ms</span>
-      </div>
-    </div>
-  </header>
 
-  <main class="grid">
-    <!-- SOL: BAŞKAN MODU PANELİ (sadece manager modunda görünür) -->
-    <aside class="panel manager-panel" id="manager-panel" style="display:none">
-      <div class="manager-tabs">
-        <button class="tab-btn active" data-tab="squad">
-          <i data-lucide="users"></i> Kadro
-        </button>
-        <button class="tab-btn" data-tab="transfers">
-          <i data-lucide="shopping-cart"></i> Transfer
-        </button>
-        <button class="tab-btn" data-tab="standings">
-          <i data-lucide="trophy"></i> Puan
-        </button>
-        <button class="tab-btn" data-tab="development">
-          <i data-lucide="trending-up"></i> Gelişim
-        </button>
+<!-- ÜST BAR (her sayfada sabit) -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="brand">
+      <i data-lucide="megaphone"></i>
+      <span>Narrative Spiker</span>
+    </div>
+    <div class="mode-badge">👔 Başkan</div>
+  </div>
+  <div class="topbar-stats">
+    <div class="stat" title="Hafta">
+      <i data-lucide="calendar"></i>
+      <span class="stat-label">Hafta</span>
+      <span class="stat-value"><span id="t-week">1</span>/34</span>
+    </div>
+    <div class="stat" title="Puan">
+      <i data-lucide="star"></i>
+      <span class="stat-value" id="t-points">0</span>
+    </div>
+    <div class="stat" title="Sıra">
+      <i data-lucide="trophy"></i>
+      <span class="stat-value">#<span id="t-rank">18</span></span>
+    </div>
+    <div class="stat" title="Bütçe">
+      <i data-lucide="wallet"></i>
+      <span class="stat-value" id="t-budget">50.0M €</span>
+    </div>
+    <div class="stat" title="Sezon">
+      <i data-lucide="hash"></i>
+      <span class="stat-value" id="t-season">1</span>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-reset" class="icon-btn" title="Yeni Sezon">
+      <i data-lucide="rotate-ccw"></i>
+    </button>
+  </div>
+</header>
+
+<!-- ALT BÖLÜM: SOL NAV + İÇERİK -->
+<div class="layout">
+  <nav class="sidenav">
+    <a href="#/" data-route="/" class="nav-item active">
+      <i data-lucide="home"></i>
+      <span>Anasayfa</span>
+    </a>
+    <a href="#/squad" data-route="/squad" class="nav-item">
+      <i data-lucide="users"></i>
+      <span>Kadro</span>
+    </a>
+    <a href="#/transfers" data-route="/transfers" class="nav-item">
+      <i data-lucide="shopping-cart"></i>
+      <span>Transfer</span>
+    </a>
+    <a href="#/standings" data-route="/standings" class="nav-item">
+      <i data-lucide="trophy"></i>
+      <span>Puan</span>
+    </a>
+    <a href="#/development" data-route="/development" class="nav-item">
+      <i data-lucide="trending-up"></i>
+      <span>Gelişim</span>
+    </a>
+    <div class="nav-divider"></div>
+    <div class="nav-team" id="team-card">
+      <div class="nt-name">Takım</div>
+      <div class="nt-meta">—</div>
+    </div>
+  </nav>
+
+  <main class="content">
+
+    <!-- ANASAYFA: LİG DURUMU + HAFTA + MAÇ -->
+    <section class="page" data-page="/" id="page-home">
+      <div class="page-header">
+        <h2><i data-lucide="home"></i> Lig Merkezi</h2>
+        <div class="page-actions">
+          <button id="btn-play-week" class="btn primary big">
+            <i data-lucide="play-circle"></i>
+            <span id="btn-play-label">Haftayı Oyna</span>
+          </button>
+        </div>
       </div>
-      <div class="manager-content">
-        <!-- KADRO SEKMESİ -->
-        <div class="tab-content active" data-tab-content="squad">
-          <div class="squad-header">
-            <div>
-              <div class="squad-budget">
-                <i data-lucide="wallet"></i>
-                <span id="budget-amount">50.0M €</span>
-              </div>
-              <div class="squad-week">Hafta: <span id="current-week">1</span>/34</div>
-            </div>
-            <div class="squad-stats">
-              <span title="Puan"><i data-lucide="star"></i> <span id="user-points">0</span></span>
-              <span title="Sıra">#<span id="user-rank">18</span></span>
-            </div>
+
+      <div class="card next-card">
+        <div class="card-label">Sonraki Maçın</div>
+        <div class="next-match">
+          <div class="nm-team home">
+            <div class="nm-name" id="next-home">—</div>
+            <div class="nm-pos" id="next-home-pos">Ev</div>
           </div>
-          <div class="next-match" id="next-match">
-            <div class="next-label">Sonraki Maç</div>
-            <div class="next-teams"><span id="next-home">—</span> vs <span id="next-away">—</span></div>
+          <div class="nm-vs">VS</div>
+          <div class="nm-team away">
+            <div class="nm-name" id="next-away">—</div>
+            <div class="nm-pos" id="next-away-pos">Dep</div>
           </div>
-          <div class="squad-section">
-            <h4><i data-lucide="play"></i> İlk 11</h4>
-            <div class="player-list" id="lineup-list"></div>
-          </div>
-          <div class="squad-section">
-            <h4><i data-lucide="armchair"></i> Yedekler</h4>
-            <div class="player-list" id="bench-list"></div>
-          </div>
-          <div class="squad-actions">
-            <button id="btn-play-week" class="btn primary">
-              <i data-lucide="play-circle"></i> Haftayı Oyna
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="calendar"></i>
+          <h3>Bu Hafta (Hafta <span id="wf-week">1</span>)</h3>
+        </div>
+        <div class="fixture-list" id="wf-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="trophy"></i>
+          <h3>Son 5 Hafta Sonuçların</h3>
+        </div>
+        <div class="recent-results" id="recent-results">
+          <div class="empty">Henüz maç oynamadın. "Haftayı Oyna" ile başla.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAÇ SAYFASI (otomatik açılır) -->
+    <section class="page" data-page="/match" id="page-match" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="play"></i> Maç Yayını</h2>
+        <div class="page-actions">
+          <div class="match-actions">
+            <button id="btn-sub-in-match" class="btn ghost" title="Manuel değişiklik yap">
+              <i data-lucide="refresh-cw"></i> Değişiklik
+            </button>
+            <button id="btn-skip-match" class="btn ghost" title="Maçı atla, direkt sonuç">
+              <i data-lucide="fast-forward"></i> Sonuç
             </button>
           </div>
         </div>
+      </div>
 
-        <!-- TRANSFER SEKMESİ -->
-        <div class="tab-content" data-tab-content="transfers" style="display:none">
-          <div class="transfer-header">
-            <h4><i data-lucide="shopping-cart"></i> Piyasa</h4>
-            <div class="transfer-budget">
-              <i data-lucide="wallet"></i> <span id="transfer-budget">50.0M €</span>
-            </div>
+      <div class="matchboard">
+        <div class="team-side">
+          <div class="ts-name" id="home-name">—</div>
+          <div class="ts-stats">
+            <div title="Sarı"><span class="dot yellow"></span> <span id="home-yellows">0</span></div>
+            <div title="Kırmızı"><span class="dot red"></span> <span id="home-reds">0</span></div>
+            <div title="Değişiklik hakkı"><i data-lucide="refresh-cw"></i> <span id="home-subs">3</span></div>
           </div>
-          <div class="transfer-filters">
-            <select id="filter-position" class="select">
-              <option value="">Pozisyon</option>
-              <option value="GK">Kaleci</option>
-              <option value="DF">Defans</option>
-              <option value="OS">Orta Saha</option>
-              <option value="FV">Forvet</option>
-            </select>
-            <select id="filter-age" class="select">
-              <option value="">Yaş</option>
-              <option value="23">≤23 (Genç)</option>
-              <option value="28">≤28 (En iyi)</option>
-              <option value="35">≤35 (Tümü)</option>
-            </select>
-            <select id="filter-stars" class="select">
-              <option value="">Yıldız</option>
-              <option value="2">2+</option>
-              <option value="3">3</option>
-            </select>
+          <div class="ts-score" id="home-score">0</div>
+        </div>
+        <div class="match-center">
+          <div class="match-clock">
+            <div class="clock-min" id="match-minute">0'</div>
+            <div class="clock-label" id="clock-label">3 Dakika</div>
           </div>
-          <div class="transfer-list" id="transfer-list"></div>
         </div>
-
-        <!-- PUAN DURUMU SEKMESİ -->
-        <div class="tab-content" data-tab-content="standings" style="display:none">
-          <h4><i data-lucide="trophy"></i> Puan Durumu</h4>
-          <div class="standings-list" id="standings-list"></div>
-        </div>
-
-        <!-- GELİŞİM SEKMESİ -->
-        <div class="tab-content" data-tab-content="development" style="display:none">
-          <h4><i data-lucide="trending-up"></i> Oyuncu Gelişimi</h4>
-          <p class="hint">Yaş, performans ve antrenmana göre haftalık gelişim. Genç oyuncular (18-23) hızlı gelişir, 30+ yaş düşüş başlar.</p>
-          <div class="dev-list" id="dev-list"></div>
+        <div class="team-side">
+          <div class="ts-name" id="away-name">—</div>
+          <div class="ts-stats">
+            <div><span class="dot yellow"></span> <span id="away-yellows">0</span></div>
+            <div><span class="dot red"></span> <span id="away-reds">0</span></div>
+            <div><i data-lucide="refresh-cw"></i> <span id="away-subs">3</span></div>
+          </div>
+          <div class="ts-score" id="away-score">0</div>
         </div>
       </div>
-    </aside>
 
-    <!-- ORTA: SPIKER CANLI ANLATIM -->
-    <section class="panel narrator-panel">
-      <div class="narrative-container">
-        <div class="narrative-header">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+        <div class="progress-text" id="progress-text">0%</div>
+      </div>
+
+      <div class="narrative-card">
+        <div class="card-header">
           <i data-lucide="mic"></i>
-          <h2>Spiker</h2>
-          <span class="live-dot"></span>
+          <h3>Spiker Anlatımı</h3>
         </div>
-        <div id="narrative-stream" class="narrative-stream">
-          <p class="placeholder">Maçı başlat, anlatım başlasın...</p>
+        <div class="narrative-stream" id="narrative-stream">
+          <p class="placeholder">Maç başlamadı.</p>
         </div>
+      </div>
+
+      <div class="events-card">
+        <div class="card-header">
+          <i data-lucide="list"></i>
+          <h3>Olay Akışı</h3>
+          <div class="search-wrap">
+            <i data-lucide="search"></i>
+            <input id="search" type="text" placeholder="Oyuncu ara..." />
+            <button id="search-clear" class="icon-btn tiny" style="display:none">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <span class="event-count" id="event-count">0</span>
+        </div>
+        <div class="search-info" id="search-info"></div>
+        <div class="events-list" id="events-list"></div>
       </div>
     </section>
 
-    <!-- SAĞ: OLAY AKIŞI + ARAMA -->
-    <section class="panel events-panel">
-      <div class="events-header">
-        <i data-lucide="list-ordered"></i>
-        <h2>Olay Akışı</h2>
-        <span class="event-count" id="event-count">0</span>
+    <!-- MAÇ SONUÇ RAPORU -->
+    <section class="page" data-page="/report" id="page-report" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="clipboard-list"></i> Maç Raporu</h2>
+        <div class="page-actions">
+          <button id="btn-back-home" class="btn primary">
+            <i data-lucide="home"></i> Lig'e Dön
+          </button>
+          <button id="btn-next-week" class="btn primary">
+            Sonraki Hafta <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
       </div>
-      <div class="search-box">
-        <i data-lucide="search"></i>
-        <input id="search" type="text" placeholder="Oyuncu ara... (örn: Icardi, Torreira)" />
-        <button id="search-clear" class="search-clear" title="Temizle">
-          <i data-lucide="x"></i>
-        </button>
+
+      <div class="card final-score-card">
+        <div class="fs-team home">
+          <div class="fs-name" id="rep-home">—</div>
+          <div class="fs-score" id="rep-home-score">0</div>
+        </div>
+        <div class="fs-vs">
+          <div class="fs-result" id="rep-result-text">Galibiyet</div>
+          <div class="fs-meta" id="rep-meta">Hafta 1</div>
+        </div>
+        <div class="fs-team away">
+          <div class="fs-name" id="rep-away">—</div>
+          <div class="fs-score" id="rep-away-score">0</div>
+        </div>
       </div>
-      <div class="search-info" id="search-info"></div>
-      <div id="events-list" class="events-list"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="bar-chart-3"></i>
+          <h3>Maç İstatistikleri</h3>
+        </div>
+        <div class="stats-grid" id="stats-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="activity"></i>
+          <h3>Play-by-Play Özeti</h3>
+        </div>
+        <div class="timeline" id="play-timeline"></div>
+      </div>
     </section>
+
+    <!-- KADRO -->
+    <section class="page" data-page="/squad" id="page-squad" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="users"></i> Kadro</h2>
+        <div class="page-actions">
+          <span class="muted"><span id="squad-lineup-count">11</span> ilk 11 + <span id="squad-bench-count">11</span> yedek</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="play"></i>
+          <h3>İlk 11</h3>
+        </div>
+        <div class="player-list" id="lineup-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="armchair"></i>
+          <h3>Yedekler</h3>
+        </div>
+        <div class="player-list" id="bench-list"></div>
+      </div>
+    </section>
+
+    <!-- TRANSFER -->
+    <section class="page" data-page="/transfers" id="page-transfers" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="shopping-cart"></i> Transfer Piyasası</h2>
+        <div class="page-actions">
+          <span class="muted">Bütçe: <strong id="transfer-budget">50.0M €</strong></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="filters">
+          <label>
+            Pozisyon
+            <select id="filter-position">
+              <option value="">Hepsi</option>
+              <option value="GK">GK</option>
+              <option value="DF">DF</option>
+              <option value="OS">OS</option>
+              <option value="FV">FV</option>
+            </select>
+          </label>
+          <label>
+            Maks yaş
+            <select id="filter-age">
+              <option value="99">Hepsi</option>
+              <option value="22">≤ 22</option>
+              <option value="25">≤ 25</option>
+              <option value="28">≤ 28</option>
+              <option value="30">≤ 30</option>
+            </select>
+          </label>
+          <label>
+            Min yıldız
+            <select id="filter-stars">
+              <option value="0">Hepsi</option>
+              <option value="2">≥ 2★</option>
+              <option value="3">≥ 3★</option>
+              <option value="4">≥ 4★</option>
+            </select>
+          </label>
+        </div>
+        <div class="transfer-list" id="transfer-list"></div>
+      </div>
+    </section>
+
+    <!-- PUAN DURUMU -->
+    <section class="page" data-page="/standings" id="page-standings" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="trophy"></i> Puan Durumu</h2>
+        <div class="page-actions">
+          <span class="muted">Sezon <span id="std-season">1</span></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="standings-list" id="standings-list"></div>
+      </div>
+    </section>
+
+    <!-- GELİŞİM -->
+    <section class="page" data-page="/development" id="page-development" style="display:none">
+      <div class="page-header">
+        <h2><i data-lucide="trending-up"></i> Oyuncu Gelişimi</h2>
+        <div class="page-actions">
+          <span class="muted">Yetenek / Potansiyel</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="dev-list" id="dev-list"></div>
+      </div>
+    </section>
+
   </main>
+</div>
 
-  <!-- SAKATLIK ONAY MODAL -->
-  <div class="modal" id="injury-modal" style="display:none">
-    <div class="modal-overlay"></div>
-    <div class="modal-content">
-      <div class="modal-header">
-        <i data-lucide="alert-triangle" class="text-rose"></i>
-        <h2>Sakatlık!</h2>
-      </div>
-      <div class="modal-body">
-        <p id="injury-message" class="injury-message"></p>
-        <p class="modal-prompt">Yedek oyuncu seç:</p>
-        <div id="injury-substitutes" class="injury-subs"></div>
-      </div>
-      <div class="modal-footer">
-        <button id="injury-cancel" class="btn ghost" disabled>
-          <i data-lucide="clock"></i> Maç Durdu
-        </button>
-      </div>
+<!-- DEĞİŞİKLİK MODAL -->
+<div id="sub-modal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-icon"><i data-lucide="refresh-cw"></i></div>
+    <h3>Değişiklik</h3>
+    <p id="sub-message">Sahadaki oyuncuyu seç, yedek ile değiştir.</p>
+    <div class="sub-section">
+      <h4>Sahadan Çıkacak</h4>
+      <div class="sub-out-list" id="sub-out-list"></div>
+    </div>
+    <div class="sub-section">
+      <h4>Yedekten Girecek</h4>
+      <div class="sub-in-list" id="sub-in-list"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btn-sub-cancel">İptal</button>
     </div>
   </div>
+</div>
 
-  <script type="module" src="app.js"></script>
+<!-- SAKATLIK BİLDİRİM MODAL -->
+<div id="injury-notice-modal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-icon"><i data-lucide="alert-triangle"></i></div>
+    <h3>Sakatlık!</h3>
+    <p id="injury-notice-message">Oyuncu sakatlandı.</p>
+    <p class="muted">Otomatik değişiklik yapılmaz. İsterseniz Kadro sayfasından manuel değişiklik yapabilirsiniz.</p>
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-injury-ok">Anladım</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
 </body>
 </html>
