@@ -110,6 +110,11 @@ const els = {
   homeScore: $('home-score'),
   awayScore: $('away-score'),
   matchMinute: $('match-minute'),
+  // match pitch
+  matchPitch: $('match-pitch'),
+  mpPlayers: $('mp-players'),
+  mpBall: $('mp-ball'),
+  mpOverlay: $('mp-overlay'),
   clockLabel: $('clock-label'),
   progressFill: $('progress-fill'),
   progressText: $('progress-text'),
@@ -1391,6 +1396,111 @@ function renderMatchPage() {
   renderScore();
   renderTacticInfo();
   renderSquadInMatch();
+  renderMatchPitch();
+}
+
+function renderMatchPitch() {
+  if (!els.mpPlayers || !match) return;
+  // İlk kez mi, yoksa güncelleme mi?
+  if (!els.mpPlayers.dataset.initialized) {
+    els.mpPlayers.dataset.initialized = '1';
+    els.mpPlayers.innerHTML = '';
+    // 22 oyuncu için dot oluştur
+    for (const side of ['home', 'away']) {
+      const team = match[side];
+      for (const p of team.players) {
+        if (!p.onField) continue;
+        const dot = document.createElement('div');
+        dot.className = `mp-player ${p.position}`;
+        dot.dataset.pid = p.id;
+        dot.dataset.side = side;
+        const tag = document.createElement('div');
+        tag.className = 'mp-name-tag';
+        tag.textContent = p.name;
+        dot.appendChild(tag);
+        els.mpPlayers.appendChild(dot);
+      }
+    }
+  }
+  // Pozisyonları güncelle
+  updatePitchPositions();
+  updatePitchBall();
+}
+
+function updatePitchPositions() {
+  if (!els.mpPlayers || !match) return;
+  for (const side of ['home', 'away']) {
+    const team = match[side];
+    for (const p of team.players) {
+      if (!p.onField) continue;
+      const dot = els.mpPlayers.querySelector(`.mp-player[data-pid="${p.id}"]`);
+      if (!dot) continue;
+      // Away (mirror): x = 100 - p.live.x
+      const x = side === 'away' ? 100 - p.live.x : p.live.x;
+      const y = p.live.y;
+      dot.style.left = `${x}%`;
+      dot.style.top = `${y}%`;
+      // Top taşıyıcı
+      if (match.ballCarrier?.id === p.id) {
+        dot.classList.add('has-ball');
+      } else {
+        dot.classList.remove('has-ball');
+      }
+    }
+  }
+}
+
+function updatePitchBall() {
+  if (!els.mpBall || !match) return;
+  const ball = match.ballPos;
+  if (!ball) return;
+  // Away top ise: x = 100 - ball.x
+  const x = match.ballSide === 'away' ? 100 - ball.x : ball.x;
+  const y = ball.y;
+  els.mpBall.style.left = `${x}%`;
+  els.mpBall.style.top = `${y}%`;
+}
+
+// === PITCH ÜZERİNDE OLAY FLASH ===
+// Her tick event varsa flash göster
+function flashPitchEvent(event) {
+  if (!els.mpOverlay || !event) return;
+  // Gol
+  if (event.type === 'goal') {
+    const flash = document.createElement('div');
+    flash.className = 'mp-goal-flash';
+    els.mpOverlay.appendChild(flash);
+    setTimeout(() => flash.remove(), 1500);
+    const banner = document.createElement('div');
+    banner.className = 'mp-banner';
+    const scorer = match?.home?.id === event.side || match?.away?.id === event.side
+      ? (match.ballSide === 'home' ? match.home : match.away)?.players?.find(p => p.id === event.actor)?.name
+      : event.actor;
+    banner.textContent = `⚽ GOL! ${scorer || ''}`.trim();
+    els.mpOverlay.appendChild(banner);
+    setTimeout(() => banner.remove(), 2500);
+  } else if (event.type === 'yellow' || event.type === 'red') {
+    const flash = document.createElement('div');
+    flash.className = 'mp-flash';
+    flash.style.background = event.type === 'red' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(252, 211, 77, 0.4)';
+    els.mpOverlay.appendChild(flash);
+    setTimeout(() => flash.remove(), 800);
+    const banner = document.createElement('div');
+    banner.className = 'mp-banner';
+    banner.style.background = event.type === 'red' ? 'rgba(239, 68, 68, 0.85)' : 'rgba(252, 211, 77, 0.85)';
+    banner.style.color = event.type === 'red' ? 'white' : 'black';
+    banner.textContent = event.type === 'red' ? '🟥 KIRMIZI KART' : '🟨 SARI KART';
+    els.mpOverlay.appendChild(banner);
+    setTimeout(() => banner.remove(), 2000);
+  } else if (event.type === 'injury') {
+    const banner = document.createElement('div');
+    banner.className = 'mp-banner';
+    banner.style.background = 'rgba(245, 158, 11, 0.85)';
+    banner.style.color = 'white';
+    banner.textContent = '🏥 SAKATLIK';
+    els.mpOverlay.appendChild(banner);
+    setTimeout(() => banner.remove(), 2000);
+  }
 }
 
 function renderTacticInfo() {
@@ -1729,6 +1839,12 @@ function launchMatch(user, opp, fix, skip) {
   els.narrativeStream.innerHTML = '';
   els.eventsList.innerHTML = '';
   els.eventCount.textContent = '0';
+  // Pitch'i sıfırla
+  if (els.mpPlayers) {
+    delete els.mpPlayers.dataset.initialized;
+    els.mpPlayers.innerHTML = '';
+  }
+  if (els.mpOverlay) els.mpOverlay.innerHTML = '';
   matchStartTime = Date.now();
   matchSecondsElapsed = 0;
 
@@ -1794,6 +1910,8 @@ function tick() {
     for (const ev of newEvents) {
       allEvents.push(ev);
       if (!searchQuery) appendEventToList(ev, true);
+      // Pitch üzerinde flash
+      flashPitchEvent(ev);
       // Sakatlık süresi ata
       if (ev.type === 'injury' && ev.actor) {
         const side = ev.side;
@@ -1840,6 +1958,11 @@ function tick() {
   }
 
   renderScore();
+  // Pitch'i güncelle (her tick)
+  if (els.matchPitch && els.matchPitch.offsetParent !== null) {
+    updatePitchPositions();
+    updatePitchBall();
+  }
 
   if (match.minute >= 90) {
     stopTimer();
