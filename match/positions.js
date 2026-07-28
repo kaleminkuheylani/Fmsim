@@ -171,6 +171,10 @@ export function updatePositions(match) {
                            : p.position === 'FV' ? -8
                            : 0;
         targetX = base.x + teamForward * compactShift * (1 - teamCompactness);
+      } else if (isMyBall && ballInOwnHalf && p.position === 'FV') {
+        // === TOP KENDI YARIMIZDA + HÜCUMDAYIZ: FV agresif ileri ===
+        // Build-up için forvet yüksekte, rakip savunmayı geri çeker
+        targetX = base.x + teamForward * 14; // 12 → 14 (daha agresif)
       }
 
       if (p.position === 'GK') {
@@ -351,32 +355,23 @@ export function updatePositions(match) {
       targetX = Math.max(2, Math.min(98, targetX));
       targetY = Math.max(2, Math.min(68, targetY));
 
-      // === SPACING: kompakt dizilim (X+Y komşu kontrolü) ===
-      // Oyuncular birbirine min 7m mesafede olmalı. Yakınsa hem X hem Y'de
-      // dışa doğru iter (formationPos'a göre yön). Sıralı iter — her çakışma
-      // ayrı kontrol edilir, böylece 3+ oyuncu aynı noktada toplanmaz.
+      // === SPACING: tek iterasyon X+Y komşu kontrolü ===
+      // 3+ oyuncu aynı noktada toplanmasın. 1 iter yeterli (3 iter
+      // oyuncuları gereksiz geri itip hücumu yavaşlatıyordu).
       const teamMates = team.players.filter(t => t.onField && t.id !== p.id);
       const SPACING_MIN = 7.0;
-      for (let iter = 0; iter < 3; iter++) {
-        let pushed = false;
-        for (const tm of teamMates) {
-          const dxT = targetX - tm.live.x;
-          const dyT = targetY - tm.live.y;
-          const d = Math.hypot(dxT, dyT);
-          if (d < SPACING_MIN && d > 0.1) {
-            // İtme yönü: oyuncudan uzağa (formationPos'a göre normalize)
-            const pushX = dxT / d;
-            const pushY = dyT / d;
-            // Hedef mesafeye ulaşana dek it
-            const need = SPACING_MIN - d;
-            targetX += pushX * need * 0.5;
-            targetY += pushY * need * 0.5;
-            pushed = true;
-          }
+      for (const tm of teamMates) {
+        const dxT = targetX - tm.live.x;
+        const dyT = targetY - tm.live.y;
+        const d = Math.hypot(dxT, dyT);
+        if (d < SPACING_MIN && d > 0.1) {
+          const pushX = dxT / d;
+          const pushY = dyT / d;
+          const need = SPACING_MIN - d;
+          targetX += pushX * need * 0.5;
+          targetY += pushY * need * 0.5;
         }
-        if (!pushed) break; // çakışma yok, çık
       }
-      // Sınırı tekrar uygula (itme sonrası sahadan çıkmış olabilir)
       targetX = Math.max(3, Math.min(97, targetX));
       targetY = Math.max(3, Math.min(67, targetY));
 
