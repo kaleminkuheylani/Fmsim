@@ -60,6 +60,10 @@ function resolvePass(match, carrier, type, target) {
   );
   difficulty += interceptors.length * 3;
 
+  // Asinalık bonusu: yüksek uyum → pas isabeti artar (difficulty azalır)
+  const affinityBonus = getAffinityBonus(carrier, targetPlayer);
+  if (affinityBonus > 0) difficulty -= affinityBonus;
+
   // Pas yetenek kontrolü
   const passCheck = skillCheck(carrier, type === 'long' ? 'passing' : 'passing', difficulty, {
     action: type === 'long' ? 'longPass' : 'passShort',
@@ -95,6 +99,9 @@ function resolvePass(match, carrier, type, target) {
     y: match.ballPos.y,
     text: `${match.minute}' ${carrier.name} → ${targetPlayer.name} (${Math.round(distance)}m)`,
   }];
+
+  // === ASİNALIK: pas atan-alıcı arası +0.5 (hafif) ===
+  bumpAffinity(carrier, targetPlayer, 0.5);
 
   // Topu hedefe taşı (ilerleme bonusu)
   const dirSign = side === 'home' ? 1 : -1;
@@ -207,16 +214,14 @@ function resolveShoot(match, carrier) {
   const saveCtx = { action: 'save', distance: distanceToGoal };
 
   // Basit kurtarış formülü: save_skill + bonus < shot_skill + bonus → gol
-  // Gerçekçi: kaleci iyi ama InBox'ta %30-35 gol, uzak %5-8
+  // InBox'ta kaleci +8 bonus (yakın mesafe bile riskli), uzak şutta kaleci +3 bonus
   const shotSkill = getEffective(carrier, action, shootCtx);
-  const saveSkill = getEffective(keeper, saveAction, saveCtx) * 0.85; // kaleci dezavantaj
-  const inBoxBonus = inBox ? 3 : 7;
-  const longShotBonus = !inBox && distanceToGoal > 20 ? -1 : 0;
-  // Varyans
-  const variance = (Math.random() - 0.5) * 20;
-  // InBox'ta +4 hücum bonus
-  const shotBonus = inBox ? 4 : 0;
-  const isGoal = (shotSkill + longShotBonus + shotBonus + variance) > (saveSkill + inBoxBonus);
+  const saveSkill = getEffective(keeper, saveAction, saveCtx);
+  const inBoxBonus = inBox ? 8 : 3;
+  const longShotBonus = !inBox && distanceToGoal > 20 ? 0 : 0;
+  // Eşitlik durumunda kaleci kazansın, ama daha geniş varyans (dramatik gol/şans)
+  const variance = (Math.random() - 0.5) * 18;
+  const isGoal = (shotSkill + longShotBonus + variance) > (saveSkill + inBoxBonus);
 
   carrier.live.shots++;
   match.stats.shots[side]++;
@@ -411,4 +416,26 @@ function fail(match, reason) {
 
 function findPlayer(match, side, playerId) {
   return match[side]?.players?.find(p => p.id === playerId) || null;
+}
+
+// === ASİNALIK (HAFİF) ===
+// İki oyuncu arasındaki uyum. Sadece pas başarılı olunca artar.
+// Sadece ilk 11 sayılır (sahadaki oyuncular). Storage-friendly.
+function bumpAffinity(a, b, amount) {
+  if (!a || !b || a.id === b.id) return;
+  a.affinity = a.affinity || {};
+  b.affinity = b.affinity || {};
+  // 5 altı gürültü, saklama
+  const av = Math.min(100, (a.affinity[b.id] || 0) + amount);
+  const bv = Math.min(100, (b.affinity[a.id] || 0) + amount);
+  if (av > 5) a.affinity[b.id] = av; else delete a.affinity[b.id];
+  if (bv > 5) b.affinity[a.id] = bv; else delete b.affinity[a.id];
+}
+
+// Pas isabeti bonusu (decision.js'den çağrılacak)
+export function getAffinityBonus(passer, receiver) {
+  if (!passer || !receiver || !passer.affinity) return 0;
+  const v = passer.affinity[receiver.id] || 0;
+  // 0 → 0, 50 → +5, 100 → +10
+  return Math.floor(v * 0.1);
 }

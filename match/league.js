@@ -10,9 +10,10 @@
 
 import { generateUniqueClubName, resetClubPool } from './clubName.js';
 import { buildTeam } from './teamBuilder.js';
-import { TEAM_DATABASE } from './teamDatabase.js';
 import { createDevelopment } from './development.js';
 import { calculatePlayerValue, ClubBudget } from './transfer.js';
+import { deployLineup } from './positions.js';
+import { TEAM_DATABASE } from './teamDatabase.js';
 
 const LEAGUE_SIZE = 18;
 const WEEKS_PER_SEASON = 34;
@@ -56,23 +57,22 @@ export class League {
       team.shortName = db.shortName;
       team.style = db.style;
       team.power = db.power;
+      team.formation = db.formation;
       team.description = db.description;
       // Yıldız seviyelerini database'den ata
       const stars = db.stars || [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
       for (let p = 0; p < team.players.length; p++) {
         const player = team.players[p];
-        const posIndex = p < 11 ? p : p - 11; // ilk 11 + yedekler
+        const posIndex = p < 11 ? p : p - 11;
         const star = p < 11 ? (stars[posIndex] || 1) : 1;
         player.stars = star;
-        // Yıldız arttıkça yetenekler artsın
-        const bonus = star * 5; // 1★ +0, 2★ +5, 3★ +10
+        const bonus = star * 5;
         if (player.attrs) {
           for (const k in player.attrs) {
             player.attrs[k] = Math.min(85, player.attrs[k] + bonus);
           }
         }
-        // Yaş db.avgAge'ye yakın
-        const ageVariance = Math.floor(Math.random() * 5) - 2; // ±2
+        const ageVariance = Math.floor(Math.random() * 5) - 2;
         player.age = Math.max(18, Math.min(36, (db.avgAge || 26) + ageVariance));
         player.potential = 70 + star * 8;
       }
@@ -84,6 +84,14 @@ export class League {
       team.history = [];
       team.isUser = false;
       this.teams.push(team);
+    }
+
+    // Tüm takımlar için sahaya 11 oyuncu çıkar (formasyonlara göre)
+    for (const team of this.teams) {
+      const onField = team.players.filter(p => p.onField).length;
+      if (onField < 11) {
+        deployLineup(team, team.formation || '442', false);
+      }
     }
 
     this._generateFixtures();
