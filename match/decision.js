@@ -263,28 +263,23 @@ export function decideAction(player, match) {
     return decideForGoalkeeper(player, match);
   }
 
-  // 1) ORTA — kanat oyuncusu kanattaysa önce orta (gerçekçi: önce orta, sonra şut)
-  if (shouldCross(player, match)) return 'cross';
-
-  // 2) ŞUT — kale yakın ve açıksa
-  if (shouldShoot(player, match)) return 'shoot';
-
-  // 3) PAS mı DRIBBLE mı?
-  // a) shouldPass true ise (önümde rakip var + arkadaş daha iyi pozisyonda)
-  //    → PPO'ya sor: pas mı yoksa yine de dribble mı?
-  // b) PPO 'passShort'/'passLong' derse → pas
-  // c) PPO 'dribble' derse → dribble (sıkışmış olsa bile)
-  // d) PPO yoksa → rule-based pas (pickPassType)
-  if (shouldPass(player, match)) {
-    const ppoAction = ppoDecide(player, match);
+  // 1) PPO RL policy — gerçek Fmsim verisinden öğrendi (5 action)
+  // PPO aksiyonu: shoot, cross, passShort, passLong, dribble
+  // Real veriyle eğitildiği için rule-based'den daha gerçekçi kararlar.
+  const ppoAction = ppoDecide(player, match);
+  if (ppoAction) {
+    // PPO 'shoot' dediyse → kural kontrolü (sadece uygunsa)
+    if (ppoAction === 'shoot' && shouldShoot(player, match)) return 'shoot';
+    if (ppoAction === 'cross' && shouldCross(player, match)) return 'cross';
     if (ppoAction === 'passShort') return 'passShort';
     if (ppoAction === 'passLong') return 'passLong';
     if (ppoAction === 'dribble') return 'dribble';
-    // PPO yüklü değilse: rule-based pas
-    return pickPassType(player, match);
   }
 
-  // 4) TUT — sadece çok yorgun
+  // 2) PPO yoksa veya guard başarısız → rule-based fallback
+  if (shouldShoot(player, match)) return 'shoot';
+  if (shouldCross(player, match)) return 'cross';
+  if (shouldPass(player, match)) return pickPassType(player, match);
   if (shouldHoldOrRecycle(player, match)) {
     return 'hold';
   }
