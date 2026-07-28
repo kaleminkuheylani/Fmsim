@@ -562,9 +562,8 @@
       if (list.querySelector('.empty')) list.innerHTML = '';
       for (const ev of r.newEvents) list.innerHTML += eventItemHtml(ev);
       list.scrollTop = list.scrollHeight;
-      // Sahada eylem efektlerini çiz
-      const _p = r.match?.players || [];
-      for (const ev of r.newEvents) { drawActionEffect(ev, _p); }
+      // Saha üzerinde sarı pas çizgileri YOK — sadece oyuncu + top animasyonu.
+      // (Çizgiler kullanıcı tarafından kaldırıldı — net görüntü için)
     }
     if (r.newNarrative?.length) {
       const list = $('narrative-list');
