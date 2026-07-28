@@ -179,7 +179,7 @@ const els = {
   // lineup
   lineupFormation: $('lineup-formation'),
   lineupPitch: $('lineup-pitch'),
-  lineupBench: $('bench-list'),
+  lineupBench: $('lineup-bench-list'),
   lineupBenchCount: $('bench-count'),
   lineupSavedInfo: $('lineup-saved-info'),
   btnLineupSave: $('btn-lineup-save'),
