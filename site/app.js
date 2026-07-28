@@ -808,16 +808,42 @@ function renderLineupPage() {
   const user = getUserTeam();
   if (!user) return;
 
-  // Başlangıç: mevcut sahadaki 11'i al
+  // Başlangıç: mevcut sahadaki 11'i al (her sayfa açılışında senkronize et)
   const onField = user.players.filter(p => p.onField);
-  if (lineupState.slots.every(s => s === null) && onField.length === 11) {
-    // İlk render — mevcut dizilişten başla
+  const onFieldIds = new Set(onField.map(p => p.id));
+  // State'de olup artık sahada olmayan oyuncuları tespit et
+  const stateFieldedIds = lineupState.slots.filter(s => s !== null);
+  const stale = stateFieldedIds.filter(id => !onFieldIds.has(id));
+  const slotsAreEmpty = lineupState.slots.every(s => s === null);
+  // İlk render VEYA state ile gerçek sahadakiler arasında tutarsızlık varsa reset
+  if (slotsAreEmpty || stale.length > 0 || onField.length !== 11) {
     lineupState.formation = user.formation || '442';
-    const slots = TACTIC_FORMATIONS[lineupState.formation];
-    for (let i = 0; i < 11; i++) {
-      lineupState.slots[i] = onField[i]?.id || null;
+    lineupState.slots = Array(11).fill(null);
+    const fieldedNow = [...onField];
+    const slots = TACTIC_FORMATIONS[lineupState.formation] || TACTIC_FORMATIONS['442'];
+    const posOrder = { GK: 1, DF: 2, OS: 3, FV: 4 };
+    fieldedNow.sort((a, b) => (posOrder[a.position] || 5) - (posOrder[b.position] || 5));
+    // Slotlara pozisyona göre sırayla yerleştir
+    const slotByRole = { GK: [], DF: [], OS: [], FV: [] };
+    slots.forEach((s, i) => slotByRole[s.role].push(i));
+    const used = new Set();
+    for (const p of fieldedNow) {
+      const candidates = slotByRole[p.position] || [];
+      const slot = candidates.find(i => !used.has(i));
+      if (slot !== undefined) {
+        lineupState.slots[slot] = p.id;
+        used.add(slot);
+      }
     }
-    const onFieldIds = new Set(onField.map(p => p.id));
+    // Kalan oyuncuları herhangi boş slota
+    for (const p of fieldedNow) {
+      if (lineupState.slots.includes(p.id)) continue;
+      const empty = slots.findIndex((s, i) => !used.has(i));
+      if (empty >= 0) {
+        lineupState.slots[empty] = p.id;
+        used.add(empty);
+      }
+    }
     lineupState.bench = user.players.filter(p => !onFieldIds.has(p.id)).map(p => p.id);
   }
 

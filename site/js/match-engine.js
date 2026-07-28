@@ -1522,7 +1522,6 @@ var Narrator = class {
     this.lastCommentaryMinute = -100;
   }
   // Yeni simülasyon event(ler)i geldi → narrative cümlesi üret
-  // Yeni simülasyon event(ler)i geldi → narrative cümlesi üret
   // SINEMATIK MOD: son dakikadaki olayları birikimleyip akıcı cümle yapar.
   // Örnek: "Aradan oynadı, altı pasta topla buluştu... ancak kaleyi bulamadı"
   narrate(events) {
@@ -1534,7 +1533,7 @@ var Narrator = class {
       if (text) evTexts.push(text);
     }
     const minute = this.match.minute;
-    const commentary = this._maybeCommentary(minute);
+    const commentary = this._maybeCommentary(minute, events);
     if (commentary) evTexts.push(commentary);
     if (evTexts.length === 0) return null;
     const seq = this.tracker.current;
@@ -1542,14 +1541,14 @@ var Narrator = class {
     const seqCount = seq?.eventCount || 0;
     if (seqCount >= 3 && (seqType === "attack" || seqType === "danger" || seqType === "build_up")) {
       const recent = evTexts.slice(-4);
-      out.push(`${minute}' ${this._composeAtakNarrative(recent, seqType)}`);
+      out.push(`${minute}' ${this._composeAtakNarrative?.(recent, seqType) || recent.join(" ")}`);
     } else {
       for (const t of evTexts) out.push(t);
     }
     return out.length === 1 ? out[0] : out.join(" ");
   }
   // Belirli dakikalarda özel yorumlar — oyuncu formu, yaşlı yıldız, yeni transfer vs.
-  _maybeCommentary(minute) {
+  _maybeCommentary(minute, events) {
     if (minute === this.lastCommentaryMinute) return null;
     if (this._recentCommentaryCooldown && this._recentCommentaryCooldown()) return null;
     const triggerMinutes = [5, 20, 38, 50, 65, 78, 88];
@@ -1561,25 +1560,26 @@ var Narrator = class {
     const candidates = focusTeam.players.filter((p) => p.onField && !p.live?.injured);
     if (candidates.length === 0) return null;
     const player = candidates[Math.floor(Math.random() * candidates.length)];
-    const text = this._commentaryText(player, focusTeam.name);
+    const text = this._commentaryText(player, focusTeam.name, minute);
     if (text) this.lastCommentaryMinute = minute;
-    return `${minute}' ${text}`;
+    return text;
   }
   _recentCommentaryCooldown() {
     if (this.lastCommentaryMinute === void 0) return false;
     return this.match.minute - this.lastCommentaryMinute < 3;
   }
   // Oyuncu için durum/durum cümlesi
-  _commentaryText(player, teamName) {
+  _commentaryText(player, teamName, minute) {
     const p = player;
     const age = p.age || 25;
     const matches = p.matchesPlayed || 0;
     const goals = p.goals || 0;
+    const assists = p.assists || 0;
     const rating = p.live?.rating || 6.5;
     const isStar = (p.stars || 1) >= 3;
     const isYoung = age <= 22;
     const isOld = age >= 33;
-    const recentlyInjured = p.live?.injured === false && p.live?.injuryWeeks && p.live.injuryWeeks >= 2;
+    const recentlyInjured = p.live?.injured === false && p.live?.injuryReturn && minute - (p.live?.injuryWeeks || 0) < 5;
     const tpls = [];
     if (isStar && rating >= 8) {
       tpls.push(`${p.name} bug\xFCn sahneye \xE7\u0131kt\u0131, y\u0131ld\u0131z parlad\u0131!`);
@@ -1610,12 +1610,37 @@ var Narrator = class {
     } else if (goals >= 3 && matches > 0) {
       tpls.push(`${p.name} gol makinesi bu sezon, durdurulam\u0131yor`);
       tpls.push(`${p.name} gol kral\u0131, ${goals} golle zirvede`);
-    } else if (matches > 8) {
+    } else if (matches > 8 && !isStar) {
       tpls.push(`${p.name} bu sezon \xE7ok forma girdi, biraz yorgun g\xF6r\xFCn\xFCyor`);
       tpls.push(`${p.name} s\xFCrekli oynuyor, dinlenme ihtiyac\u0131 olabilir`);
     }
     if (tpls.length === 0) return null;
-    return tpls[Math.floor(Math.random() * tpls.length)];
+    return `${minute}' ${tpls[Math.floor(Math.random() * tpls.length)]}`;
+  }
+  // Saldırı sekansını akıcı cümleye dönüştür
+  _composeAtakNarrative(phrases, seqType) {
+    if (phrases.length === 0) return null;
+    if (phrases.length === 1) return phrases[0];
+    const t = seqType;
+    let c\u00FCmle = "";
+    if (t === "danger") {
+      const templates = [
+        phrases.join("... "),
+        phrases.join(", "),
+        phrases.join(" \u2014 ")
+      ];
+      c\u00FCmle = templates[Math.floor(Math.random() * templates.length)];
+    } else if (t === "attack") {
+      const templates = [
+        phrases.join(", "),
+        phrases.join(" \u2014 "),
+        phrases.join(" / ")
+      ];
+      c\u00FCmle = templates[Math.floor(Math.random() * templates.length)];
+    } else {
+      c\u00FCmle = phrases.join(", ");
+    }
+    return c\u00FCmle;
   }
   _recentTransitionCooldown() {
     return this.match.minute - this.lastTransitionMinute < 2;
@@ -1780,17 +1805,44 @@ var Narrator = class {
     const actor = this._nameOf(side, id);
     if (!actor) return null;
     if (ev.reason === "sut_isabetsiz") {
-      const direction = this.match.ballPos.y < 35 ? "yandan" : "\xFCstten";
-      const tpl = pick("critical.shotMiss");
-      if (!tpl) return null;
-      return `${minute}' ` + fill(tpl, { actor, direction });
+      const tpls = [
+        `${actor} \u015Futunu \xE7ekti, auta gitti`,
+        `${actor} kaleciyi ge\xE7ti ama top auta gitti`,
+        `${actor} topu a\u011Flara g\xF6nderemedi, d\u0131\u015Far\u0131da`,
+        `${actor} uzak k\xF6\u015Feye ni\u015Fanlad\u0131, topu d\u0131\u015Far\u0131 att\u0131`,
+        `${actor} sert vurdu, top \xFCst dire\u011Fin \xFCst\xFCnden auta`,
+        `${actor} topukla vurdu, kaleyi bulamad\u0131`,
+        `${actor} bombo\u015F pozisyonda topu d\u0131\u015Far\u0131 att\u0131 \u2014 inan\u0131lmaz`,
+        `${actor} alt\u0131 pasta topla bulu\u015Ftu, vuru\u015Fu auta gitti`,
+        `${actor} kar\u015F\u0131 kar\u015F\u0131ya pozisyonda topu auta g\xF6nderdi`,
+        `${actor} \u015Futu defans\u0131n m\xFCdahalesiyle y\xF6n de\u011Fi\u015Ftirip auta gitti`,
+        `${actor} vuru\u015Fu zay\u0131f kald\u0131, kaleci arkas\u0131na gitti`,
+        `${actor} uzak dire\u011Fin dibine ni\u015Fanlad\u0131 ama top d\u0131\u015Far\u0131 \xE7\u0131kt\u0131`,
+        `${actor} yak\u0131n mesafeden vurdu, top yava\u015F\xE7a auta gitti`,
+        `${actor} kalecinin \xFCst\xFCne vurdu, top auta`
+      ];
+      const tpl = tpls[Math.floor(Math.random() * tpls.length)];
+      return `${minute}' ${tpl}`;
     }
     if (ev.reason === "kaleciKurtardi") {
       const keeperSide = side === "home" ? "away" : "home";
       const keeper = this.match[keeperSide]?.players?.find((p) => p.position === "GK");
-      const tpl = pick("critical.shotSaved");
-      if (!tpl) return null;
-      return `${minute}' ` + fill(tpl, { actor, keeper: keeper?.name || "kaleci" });
+      const keeperName = keeper ? keeper.name : "Kaleci";
+      const tpls = [
+        `${actor} \u015Futunu \xE7ekti, ${keeperName} m\xFCthi\u015F kurtard\u0131`,
+        `${actor} topu a\u011Flara g\xF6ndermek \xFCzereydi, ${keeperName} \xE7\u0131kard\u0131`,
+        `${actor} sert vurdu, ${keeperName} uzan\u0131p kornere \xE7eldi`,
+        `${actor} alt\u0131 pasta topla bulu\u015Ftu, vuru\u015Fu \u2014 ${keeperName} kurtard\u0131`,
+        `${actor} k\xF6\u015Feye ni\u015Fanlad\u0131, ${keeperName} parmak u\xE7lar\u0131yla kornere att\u0131`,
+        `${actor} \u015Futu sert, ${keeperName} refleksle kurtard\u0131`,
+        `${actor} bombo\u015F pozisyonda, ${keeperName} tek eliyle \xE7\u0131kard\u0131`,
+        `${actor} kar\u015F\u0131 kar\u015F\u0131ya, ${keeperName} ayaklar\u0131yla kapatt\u0131`,
+        `${actor} vuru\u015Fu ${keeperName} g\xF6\u011Fs\xFCyle bloke etti`,
+        `${actor} topu ${keeperName} kontrol etti \u2014 kritik kurtar\u0131\u015F`,
+        `${actor} kafay\u0131 vurdu, ${keeperName} \xE7izgiden \xE7\u0131kard\u0131`
+      ];
+      const tpl = tpls[Math.floor(Math.random() * tpls.length)];
+      return `${minute}' ${tpl}`;
     }
     return null;
   }

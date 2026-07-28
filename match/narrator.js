@@ -177,7 +177,6 @@ export class Narrator {
   }
 
   // Yeni simülasyon event(ler)i geldi → narrative cümlesi üret
-  // Yeni simülasyon event(ler)i geldi → narrative cümlesi üret
   // SINEMATIK MOD: son dakikadaki olayları birikimleyip akıcı cümle yapar.
   // Örnek: "Aradan oynadı, altı pasta topla buluştu... ancak kaleyi bulamadı"
   narrate(events) {
@@ -191,9 +190,9 @@ export class Narrator {
       if (text) evTexts.push(text);
     }
 
-    // Dakikaya özel yorum
+    // Dakikaya özel yorum (özel zamanlarda)
     const minute = this.match.minute;
-    const commentary = this._maybeCommentary(minute);
+    const commentary = this._maybeCommentary(minute, events);
     if (commentary) evTexts.push(commentary);
 
     if (evTexts.length === 0) return null;
@@ -203,11 +202,14 @@ export class Narrator {
     const seqType = seq?.type || 'unknown';
     const seqCount = seq?.eventCount || 0;
 
-    // Saldırı sekansı: 3+ event birleştir
+    // Eğer bu bir saldırı sekansı ise ve peş peşe 3+ event varsa,
+    // bağlamsal akıcı paragraf üret
     if (seqCount >= 3 && (seqType === 'attack' || seqType === 'danger' || seqType === 'build_up')) {
+      // Son 3-4 event'i birleştirip akıcı anlatım yap
       const recent = evTexts.slice(-4);
-      out.push(`${minute}' ${this._composeAtakNarrative(recent, seqType)}`);
+      out.push(`${minute}' ${this._composeAtakNarrative?.(recent, seqType) || recent.join(' ')}`);
     } else {
+      // Tekil olaylar (gol, kart, sakatlık, değişiklik) her zaman ayrı
       for (const t of evTexts) out.push(t);
     }
 
@@ -215,24 +217,28 @@ export class Narrator {
   }
 
   // Belirli dakikalarda özel yorumlar — oyuncu formu, yaşlı yıldız, yeni transfer vs.
-  _maybeCommentary(minute) {
+  _maybeCommentary(minute, events) {
+    // Çok sık olmasın
     if (minute === this.lastCommentaryMinute) return null;
     if (this._recentCommentaryCooldown && this._recentCommentaryCooldown()) return null;
 
+    // Özel dakikalar: 5, 20, 38, 50, 65, 78, 88
     const triggerMinutes = [5, 20, 38, 50, 65, 78, 88];
     if (!triggerMinutes.includes(minute)) return null;
 
+    // Hangi taraf hakkında konuşalım
     const sides = ['home', 'away'];
     const focusSide = sides[Math.floor(Math.random() * sides.length)];
     const focusTeam = this.match[focusSide];
     if (!focusTeam?.players) return null;
 
+    // Öne çıkan oyuncu seç
     const candidates = focusTeam.players.filter(p => p.onField && !p.live?.injured);
     if (candidates.length === 0) return null;
     const player = candidates[Math.floor(Math.random() * candidates.length)];
-    const text = this._commentaryText(player, focusTeam.name);
+    const text = this._commentaryText(player, focusTeam.name, minute);
     if (text) this.lastCommentaryMinute = minute;
-    return `${minute}' ${text}`;
+    return text;
   }
 
   _recentCommentaryCooldown() {
@@ -241,54 +247,106 @@ export class Narrator {
   }
 
   // Oyuncu için durum/durum cümlesi
-  _commentaryText(player, teamName) {
+  _commentaryText(player, teamName, minute) {
     const p = player;
     const age = p.age || 25;
     const matches = p.matchesPlayed || 0;
     const goals = p.goals || 0;
+    const assists = p.assists || 0;
     const rating = (p.live?.rating || 6.5);
     const isStar = (p.stars || 1) >= 3;
     const isYoung = age <= 22;
     const isOld = age >= 33;
-    const recentlyInjured = p.live?.injured === false && p.live?.injuryWeeks && p.live.injuryWeeks >= 2;
+    const recentlyInjured = p.live?.injured === false && p.live?.injuryReturn && (minute - (p.live?.injuryWeeks || 0)) < 5;
     const tpls = [];
 
+    // 1) Yıldız ve yüksek form
     if (isStar && rating >= 8.0) {
       tpls.push(`${p.name} bugün sahneye çıktı, yıldız parladı!`);
       tpls.push(`${p.name} çok formda, sahada her top ona geliyor`);
       tpls.push(`${p.name} yıldız olmasını hatırlatıyor herkesi`);
       tpls.push(`${p.name} kalitesi fark yaratıyor, takımı sırtlıyor`);
-    } else if (rating >= 8.5) {
+    }
+    // 2) Yüksek rating (yıldız olmayan oyuncu iyi oynuyorsa)
+    else if (rating >= 8.5) {
       tpls.push(`${p.name} maçın yıldızı, müthiş performans`);
       tpls.push(`${p.name} beklenenden iyi, sahayı domine ediyor`);
       tpls.push(`${p.name} müthiş oynuyor, bu seviye kalıcı olur mu göreceğiz`);
-    } else if (isYoung && matches > 0) {
+    }
+    // 3) Genç ve yetenekli
+    else if (isYoung && matches > 0) {
       tpls.push(`${p.name} ${age} yaşında, genç yaşta forma giriyor`);
       tpls.push(`${p.name} genç yıldız adayı, cesur oynuyor`);
       tpls.push(`${p.name} gençliğine rağmen sakin, olgun oyun`);
-    } else if (isOld && (p.stars || 1) >= 2) {
+    }
+    // 4) Yaşlı ama yetenekli (35'lik Yıldız gibi)
+    else if (isOld && (p.stars || 1) >= 2) {
       tpls.push(`${p.name} ${age} yaşında hâlâ sahada, yaşına inat performans`);
       tpls.push(`${p.name} yaşı ${age} ama hâlâ Yıldız gibi, efsane`);
       tpls.push(`${p.name} kariyerinin son deminde hâlâ kaliteli`);
       tpls.push(`${p.name} yaşına rağmen en iyiler arasında, tecrübe konuşuyor`);
-    } else if (recentlyInjured) {
+    }
+    // 5) Sakatlıktan yeni dönen
+    else if (recentlyInjured) {
       tpls.push(`${p.name} sakatlıktan döndü, hazır görünüyor`);
       tpls.push(`${p.name} sahalara geri döndü, formsuz ama hazır`);
       tpls.push(`${p.name} uzun aradan sonra geri döndü, tutkulu`);
-    } else if (rating < 6.0 && matches > 2) {
+    }
+    // 6) Düşük form, kötü performans
+    else if (rating < 6.0 && matches > 2) {
       tpls.push(`${p.name} bugün istediğini yapamıyor, formsuz`);
       tpls.push(`${p.name} bu maçta gözden düşmüş görünüyor`);
       tpls.push(`${p.name} oyundan düşmüş, menajer hamle arıyor olabilir`);
-    } else if (goals >= 3 && matches > 0) {
+    }
+    // 7) Yıldız oyuncu gol atınca/orta sahada
+    else if (goals >= 3 && matches > 0) {
       tpls.push(`${p.name} gol makinesi bu sezon, durdurulamıyor`);
       tpls.push(`${p.name} gol kralı, ${goals} golle zirvede`);
-    } else if (matches > 8) {
+    }
+    // 8) Çok maç oynayıp yorulan
+    else if (matches > 8 && !isStar) {
       tpls.push(`${p.name} bu sezon çok forma girdi, biraz yorgun görünüyor`);
       tpls.push(`${p.name} sürekli oynuyor, dinlenme ihtiyacı olabilir`);
     }
 
     if (tpls.length === 0) return null;
-    return tpls[Math.floor(Math.random() * tpls.length)];
+    return `${minute}' ${tpls[Math.floor(Math.random() * tpls.length)]}`;
+  }
+
+  // Saldırı sekansını akıcı cümleye dönüştür
+  _composeAtakNarrative(phrases, seqType) {
+    // phrases: ["X pas verdi", "Y aldı", "Z ortaladı", "W şut attı"]
+    // Sinematik birleştirme
+    if (phrases.length === 0) return null;
+    if (phrases.length === 1) return phrases[0];
+
+    // Bağlama göre seç — her maçta farklı cümle
+    const t = seqType;
+    let cümle = '';
+
+    // Yüksek tehdit: kısa kesik cümleler
+    if (t === 'danger') {
+      const templates = [
+        phrases.join('... '),
+        phrases.join(', '),
+        phrases.join(' — '),
+      ];
+      cümle = templates[Math.floor(Math.random() * templates.length)];
+    }
+    // Orta tehdit: bağlaçlı akıcı
+    else if (t === 'attack') {
+      const templates = [
+        phrases.join(', '),
+        phrases.join(' — '),
+        phrases.join(' / '),
+      ];
+      cümle = templates[Math.floor(Math.random() * templates.length)];
+    }
+    // Düşük: bağlaç + ara sıra
+    else {
+      cümle = phrases.join(', ');
+    }
+    return cümle;
   }
 
   _recentTransitionCooldown() {
@@ -309,14 +367,17 @@ export class Narrator {
       return this._narrateShot(ev);
     }
 
+    // === PAS — zengin anlatım ===
     if (ev.type === 'pass_success') {
       return this._narratePass(ev);
     }
 
+    // === Dribling ===
     if (ev.type === 'dribble_success') {
       return this._narrateDribble(ev);
     }
 
+    // === Top kaybı / mücadele kazanma ===
     if (ev.type === 'turnover' || ev.type === 'tackle_won') {
       return this._narrateTransition(ev);
     }
@@ -333,6 +394,7 @@ export class Narrator {
     const seqType = seq?.type || 'unknown';
     const seqCount = seq?.eventCount || 0;
 
+    // Danger zone'da uzun sekans: dramatik
     if (seqType === 'danger' && seqCount >= 3) {
       const tpls = [
         `${actor} aradan oynadı — ${target || 'arkadaşı'} topla buluştu`,
@@ -343,6 +405,7 @@ export class Narrator {
       const tpl = tpls[Math.floor(Math.random() * tpls.length)];
       return `${ev.minute}' ${tpl}`;
     }
+    // Attack zone: orta tehdit
     if (seqType === 'attack' && seqCount >= 2) {
       const tpls = [
         `${actor} topu aldı, ${target ? `${target}'a oynadı` : 'ileri taşıdı'}`,
@@ -354,6 +417,7 @@ export class Narrator {
       const tpl = tpls[Math.floor(Math.random() * tpls.length)];
       return `${ev.minute}' ${tpl}`;
     }
+    // Build up: defanstan çıkış
     if (seqType === 'build_up' || seqType === 'midfield') {
       const tpls = [
         `${actor} geriden topu aldı, ${target ? `${target}'a oynadı` : 'ilerledi'}`,
@@ -366,6 +430,7 @@ export class Narrator {
       const tpl = tpls[Math.floor(Math.random() * tpls.length)];
       return `${ev.minute}' ${tpl}`;
     }
+    // Default
     if (target) {
       return `${ev.minute}' ${actor} → ${target}`;
     }
@@ -477,17 +542,45 @@ export class Narrator {
     if (!actor) return null;
 
     if (ev.reason === 'sut_isabetsiz') {
-      const direction = this.match.ballPos.y < 35 ? 'yandan' : 'üstten';
-      const tpl = pick('critical.shotMiss');
-      if (!tpl) return null;
-      return `${minute}' ` + fill(tpl, { actor, direction });
+      // Zengin varyasyonlar
+      const tpls = [
+        `${actor} şutunu çekti, auta gitti`,
+        `${actor} kaleciyi geçti ama top auta gitti`,
+        `${actor} topu ağlara gönderemedi, dışarıda`,
+        `${actor} uzak köşeye nişanladı, topu dışarı attı`,
+        `${actor} sert vurdu, top üst direğin üstünden auta`,
+        `${actor} topukla vurdu, kaleyi bulamadı`,
+        `${actor} bomboş pozisyonda topu dışarı attı — inanılmaz`,
+        `${actor} altı pasta topla buluştu, vuruşu auta gitti`,
+        `${actor} karşı karşıya pozisyonda topu auta gönderdi`,
+        `${actor} şutu defansın müdahalesiyle yön değiştirip auta gitti`,
+        `${actor} vuruşu zayıf kaldı, kaleci arkasına gitti`,
+        `${actor} uzak direğin dibine nişanladı ama top dışarı çıktı`,
+        `${actor} yakın mesafeden vurdu, top yavaşça auta gitti`,
+        `${actor} kalecinin üstüne vurdu, top auta`,
+      ];
+      const tpl = tpls[Math.floor(Math.random() * tpls.length)];
+      return `${minute}' ${tpl}`;
     }
     if (ev.reason === 'kaleciKurtardi') {
       const keeperSide = side === 'home' ? 'away' : 'home';
       const keeper = this.match[keeperSide]?.players?.find(p => p.position === 'GK');
-      const tpl = pick('critical.shotSaved');
-      if (!tpl) return null;
-      return `${minute}' ` + fill(tpl, { actor, keeper: keeper?.name || 'kaleci' });
+      const keeperName = keeper ? keeper.name : 'Kaleci';
+      const tpls = [
+        `${actor} şutunu çekti, ${keeperName} müthiş kurtardı`,
+        `${actor} topu ağlara göndermek üzereydi, ${keeperName} çıkardı`,
+        `${actor} sert vurdu, ${keeperName} uzanıp kornere çeldi`,
+        `${actor} altı pasta topla buluştu, vuruşu — ${keeperName} kurtardı`,
+        `${actor} köşeye nişanladı, ${keeperName} parmak uçlarıyla kornere attı`,
+        `${actor} şutu sert, ${keeperName} refleksle kurtardı`,
+        `${actor} bomboş pozisyonda, ${keeperName} tek eliyle çıkardı`,
+        `${actor} karşı karşıya, ${keeperName} ayaklarıyla kapattı`,
+        `${actor} vuruşu ${keeperName} göğsüyle bloke etti`,
+        `${actor} topu ${keeperName} kontrol etti — kritik kurtarış`,
+        `${actor} kafayı vurdu, ${keeperName} çizgiden çıkardı`,
+      ];
+      const tpl = tpls[Math.floor(Math.random() * tpls.length)];
+      return `${minute}' ${tpl}`;
     }
     return null;
   }
