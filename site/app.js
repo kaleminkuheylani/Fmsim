@@ -955,7 +955,9 @@ function drawPitch() {
       chip.dataset.playerId = player.id;
       chip.dataset.fromSlot = i;
       const firstName = (player.name || '').split(' ').slice(0, 2).join(' ');
+      const rating = computePlayerRating(player).toFixed(1);
       chip.innerHTML = `
+        <div class="lpp-rating">${rating}</div>
         <div class="lpp-pos">${player.position}</div>
         <div class="lpp-name">${firstName}</div>
       `;
@@ -1637,7 +1639,9 @@ function renderLineupMini(formation) {
       const chip = document.createElement('div');
       chip.className = `lmp-chip ${player.position}`;
       const firstName = (player.name || '').split(' ').slice(0, 2).join(' ');
+      const rating = computePlayerRating(player).toFixed(1);
       chip.innerHTML = `
+        <div class="lm-rating">${rating}</div>
         <div class="lm-name">${firstName}</div>
       `;
       chip.title = `${player.name} (${player.position})`;
