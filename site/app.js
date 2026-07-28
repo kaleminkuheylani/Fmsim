@@ -176,6 +176,10 @@ const els = {
   phTrainBtn: $('ph-train-btn'),
   phLastPerf: $('ph-last-perf'),
   btnPlayerBack: $('btn-player-back'),
+  // offers
+  offersCard: $('offers-card'),
+  offersList: $('offers-list'),
+  offersCount: $('offers-count'),
 };
 
 // === ROUTING ===
@@ -352,6 +356,9 @@ function renderHome() {
   const wk = game.league.currentWeek + 1;
   els.wfWeek.textContent = wk;
 
+  // Teklifler
+  renderOffers();
+
   const userMatch = getUserMatchThisWeek();
   if (userMatch) {
     const home = game.league.teams.find(t => t.id === userMatch.homeId);
@@ -421,6 +428,126 @@ function renderHome() {
       els.recentResults.appendChild(item);
     }
   }
+}
+
+// === CPU TRANSFER TEKLİFLERİ ===
+function renderOffers() {
+  if (!els.offersList) return;
+  if (!game.offers) game.offers = [];
+  if (game.offers.length === 0) {
+    els.offersCard.style.display = 'none';
+    return;
+  }
+  els.offersCard.style.display = 'block';
+  els.offersCount.textContent = game.offers.length;
+  els.offersList.innerHTML = '';
+  for (const offer of game.offers) {
+    const player = getUserTeam()?.players.find(p => p.id === offer.playerId);
+    if (!player) continue;
+    const item = document.createElement('div');
+    item.className = 'offer-item';
+    const ageCategory = player.age < 23 ? '🟢' : player.age < 28 ? '🔵' : '🟡';
+    item.innerHTML = `
+      <div class="oi-info">
+        <div class="oi-player">${player.name} <span class="muted">${player.position} ${ageCategory} · ⭐${player.stars || 1}</span></div>
+        <div class="oi-meta">İsteyen: <strong>${offer.fromClub}</strong> · ${player.matchesPlayed || 0} maç · ${player.goals || 0} gol · ${player.assists || 0} asist</div>
+      </div>
+      <div class="oi-amount">${formatMoney(offer.amount)}</div>
+      <div class="oi-actions">
+        <button class="btn btn-accept" data-oid="${offer.id}">Kabul</button>
+        <button class="btn btn-reject" data-oid="${offer.id}">Red</button>
+      </div>
+    `;
+    item.querySelector('.btn-accept').addEventListener('click', () => acceptOffer(offer.id));
+    item.querySelector('.btn-reject').addEventListener('click', () => rejectOffer(offer.id));
+    els.offersList.appendChild(item);
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function acceptOffer(offerId) {
+  if (!game) return;
+  const offer = game.offers.find(o => o.id === offerId);
+  if (!offer) return;
+  const user = getUserTeam();
+  const player = user?.players.find(p => p.id === offer.playerId);
+  if (!user || !player) return;
+  // Bütçeye ekle
+  user.budget.budget += offer.amount;
+  if (user.budget.receiveTransferIncome) {
+    user.budget.receiveTransferIncome(offer.amount, player.name, game.league.currentWeek);
+  }
+  // Oyuncuyu çıkar
+  user.players = user.players.filter(p => p.id !== player.id);
+  // Teklifi kaldır
+  game.offers = game.offers.filter(o => o.id !== offerId);
+  saveGame();
+  applyRoute();
+}
+
+function rejectOffer(offerId) {
+  if (!game) return;
+  game.offers = game.offers.filter(o => o.id !== offerId);
+  saveGame();
+  applyRoute();
+}
+
+// Her hafta başı 1-3 teklif üret
+function generateOffers(week) {
+  if (!game) return;
+  if (!game.offers) game.offers = [];
+  // Zaten teklif varsa yeni üretme
+  if (game.offers.length > 0) return;
+  const user = getUserTeam();
+  if (!user) return;
+
+  const candidates = user.players.filter(p => {
+    if (p.live?.injured || p.live?.suspended) return false;
+    if (p.matchesPlayed < 1) return false; // en az 1 maç oynamış
+    const rating = computePlayerRating(p);
+    if (rating < 7.0) return false; // orta ve üstü
+    return true;
+  });
+
+  // Her aday için teklife göre olasılık
+  const selected = [];
+  for (const p of candidates) {
+    const rating = computePlayerRating(p);
+    let chance = 0;
+    if (rating >= 8.5) chance = 0.50;
+    else if (rating >= 8.0) chance = 0.25;
+    else if (rating >= 7.0) chance = 0.10;
+    if (Math.random() < chance) selected.push(p);
+  }
+
+  if (selected.length === 0) return;
+
+  // 1-3 arası teklif
+  const numOffers = Math.min(3, Math.max(1, Math.floor(Math.random() * 3) + 1));
+  const shuffled = selected.sort(() => Math.random() - 0.5).slice(0, numOffers);
+
+  for (const player of shuffled) {
+    // Kulüp ismi — kurgusal, pool'dan
+    const fromClub = getRandomOpponentClubName();
+    // Fiyat: value × (1.0-1.5)
+    const multiplier = 1.0 + Math.random() * 0.5;
+    const amount = Math.round((player.value || 1_000_000) * multiplier);
+
+    game.offers.push({
+      id: 'offer_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      playerId: player.id,
+      fromClub,
+      amount,
+      week,
+    });
+  }
+}
+
+function getRandomOpponentClubName() {
+  // Lig'den bir AI kulüp adı
+  if (!game?.league?.teams) return 'Bilinmeyen FK';
+  const aiTeams = game.league.teams.filter(t => t.id !== 'user');
+  return aiTeams[Math.floor(Math.random() * aiTeams.length)]?.name || 'Bilinmeyen FK';
 }
 
 // === RENDER: SQUAD ===
@@ -875,6 +1002,9 @@ function playWeek(skip = false) {
 
   // Sakatlık iyileşmesi + ceza sıfırlama
   recoverPlayers(next);
+
+  // CPU teklifleri üret
+  generateOffers(next);
 
   // AI maçları önce oyna
   const weekFixtures = game.league.fixtures.filter(f => f.week === next);
@@ -1748,6 +1878,7 @@ import('./js/match-engine.js').then(mod => {
     game = { league, transferMarket: saved.transferMarket };
     game.trainingPoints = saved.trainingPoints ?? 5;
     game.lastTrainingWeek = saved.lastTrainingWeek ?? -1;
+    game.offers = saved.offers || [];
   } else {
     resetNamePool();
     resetClubPool();
@@ -1763,7 +1894,7 @@ import('./js/match-engine.js').then(mod => {
     league.setup(userTeam);
     league.userTeamId = 'user';
     deployLineupToTeam(userTeam);
-    game = { league, transferMarket: generateMarket(), trainingPoints: 5, lastTrainingWeek: -1 };
+    game = { league, transferMarket: generateMarket(), trainingPoints: 5, lastTrainingWeek: -1, offers: [] };
     // Yeni oyun: tüm oyunculara başlangıç kişisel parası + istatistik
     for (const p of userTeam.players) {
       p.personalMoney = 100_000 + p.stars * 50_000;

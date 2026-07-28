@@ -386,6 +386,30 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .player-item .p-meta { color: var(--text-dim); font-size: 11px; text-align: right; }
 
 /* === TRANSFER === */
+.offers-card { border-color: var(--info); }
+.offers-list { display: flex; flex-direction: column; gap: 8px; }
+.offer-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.offer-item .oi-info { display: flex; flex-direction: column; gap: 2px; }
+.offer-item .oi-player { font-weight: 600; }
+.offer-item .oi-meta { font-size: 11px; color: var(--text-dim); }
+.offer-item .oi-amount {
+  font-size: 18px; font-weight: 800;
+  color: var(--good); font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.offer-item .oi-actions { display: flex; gap: 4px; }
+.offer-item .btn { padding: 5px 10px; font-size: 11px; }
+.offer-item .btn-accept { background: var(--good); color: white; border-color: var(--good); }
+.offer-item .btn-reject { background: transparent; color: var(--text-dim); }
+
 .filters { display: flex; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .filters label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
 .filters select {
