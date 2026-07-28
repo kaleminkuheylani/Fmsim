@@ -293,6 +293,29 @@ function basePositionOf(player, formationId, mirror) {
 }
 
 // game/playerSchema.js
+var ATTRS = [
+  "passing",
+  "shooting",
+  "tackling",
+  "dribbling",
+  "finishing",
+  "crossing",
+  "composure",
+  "vision",
+  "decisions",
+  "firstTouch",
+  "reflexes",
+  "agility",
+  "pace",
+  "longShots",
+  "interception",
+  "aerial",
+  "marking",
+  "positioning",
+  "leadership",
+  "aggression",
+  "flair"
+];
 var ROLE_WEIGHTS = {
   GK: { reflexes: 1.3, positioning: 1.2, composure: 1.1, passing: 0.9 },
   DF: { tackling: 1.3, marking: 1.2, interception: 1.1, aerial: 1.1, passing: 0.9 },
@@ -4224,6 +4247,7 @@ var League = class {
   }
 };
 export {
+  ATTRS,
   ClubBudget,
   DevelopmentEngine,
   LEAGUE_SIZE,
@@ -4232,7 +4256,9 @@ export {
   MotivationEngine,
   Narrator,
   PITCH,
+  ROLE_WEIGHTS,
   SEASON_STARTING_BUDGET,
+  STAR_TRAITS,
   TransferMarket,
   WEEKS_PER_SEASON,
   all as allComments,

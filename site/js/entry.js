@@ -30,3 +30,6 @@ export {
   pick, pickOne, getComment, fillTemplate,
   all as allComments, keys, stats as commentStats,
 } from '../../match/commentlib/index.js';
+
+// Player schema — ATTRS, ROLE_WEIGHTS, STAR_TRAITS
+export { ATTRS, ROLE_WEIGHTS, STAR_TRAITS } from '../../game/playerSchema.js';

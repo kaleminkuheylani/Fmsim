@@ -12,9 +12,9 @@ import {
   generateUniqueClubName,
   resetNamePool,
   resetClubPool,
+  ATTRS,
+  ROLE_WEIGHTS,
 } from './js/match-engine.js';
-
-import { ATTRS, ROLE_WEIGHTS } from './game/playerSchema.js';
 
 if (window.lucide) lucide.createIcons();
 
