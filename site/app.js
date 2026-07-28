@@ -30,7 +30,7 @@ let lastReport = null;
 let currentPlayerId = null;
 
 // Maç 3 dakika sabit süre
-const MATCH_DURATION_SEC = 180; // saniye
+const MATCH_DURATION_SEC = 120; // saniye (2 dakikada 90 dakika)
 const TICK_INTERVAL_MS = 100;   // her tick 100ms = 0.1s maç zamanı
 let matchStartTime = 0;
 let matchSecondsElapsed = 0;

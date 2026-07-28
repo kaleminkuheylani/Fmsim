@@ -124,10 +124,12 @@ function adjacentRole(role) {
 export function updatePositions(match) {
   const ball = match.ballPos;
   const side = match.ballSide;
+  const carrier = match.ballCarrier;
 
   for (const teamSide of ['home', 'away']) {
     const team = match[teamSide];
     const mirror = teamSide === 'away';
+    const isMyBall = side === teamSide;
     for (const p of team.players) {
       if (!p.onField) continue;
 
@@ -138,33 +140,79 @@ export function updatePositions(match) {
       let targetX = base.x;
       let targetY = base.y;
 
-      // Top yanımızda → hücum yönüne kay
-      // Top karşıda → savunmada kal
-      const attacking = side === teamSide;
-      const xDist = mirror ? ball.x - (100 - base.x) : ball.x - base.x;
+      // === TOPA GÖRE KONUM ALMA ===
+      // Taşıyıcıya uzaklık
+      const px = mirror ? 100 - p.live.x : p.live.x;
+      const py = p.live.y;
+      const ballX = ball.x;
+      const ballY = ball.y;
+      const distToBall = Math.hypot(px - ballX, py - ballY);
 
       if (p.position === 'GK') {
         // Kaleci: top ceza sahasına yaklaşırsa öne çıkar
-        if (attacking) targetX += 2;
-        else targetX += Math.max(0, 4 - Math.abs(xDist) / 10);
-        // Top kanattan gelirse kaleci y kayar
-        if (mirror) targetY = 35 + (ball.y - 35) * 0.2;
-        else targetY = 35 + (ball.y - 35) * 0.2;
+        targetX = isMyBall ? base.x + 2 : base.x - Math.max(0, 4 - distToBall / 10);
+        // Top kanattan gelirse kaleci y kayar (daha agresif)
+        targetY = 35 + (ballY - 35) * 0.5;
       } else if (p.position === 'DF') {
-        if (attacking) targetX += 5;
-        else targetX -= 3;
+        if (isMyBall) {
+          // Hücumdayız: hafif öne çık (bindirme)
+          targetX = base.x + 5;
+          // Top kanattaysa kanada kay
+          if (distToBall < 25) targetY = base.y + (ballY - base.y) * 0.3;
+        } else {
+          // Savunuyoruz: top yakınsa araya girmeye çalış
+          if (distToBall < 20) {
+            // Topun biraz önüne geç
+            targetX = Math.max(base.x - 3, ballX - 5);
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else {
+            targetX = base.x - 3;
+            targetY = base.y + (ballY - base.y) * 0.15;
+          }
+        }
       } else if (p.position === 'OS') {
-        if (attacking) targetX += 4;
-        else targetX -= 2;
+        if (isMyBall) {
+          // Hücum: pas opsiyonu oluştur, öne çık
+          targetX = base.x + 4;
+          // Top yakınsa topa desteğe gel
+          if (distToBall < 20) {
+            targetX = base.x + 6;
+            targetY = base.y + (ballY - base.y) * 0.4;
+          }
+        } else {
+          // Savunma: top yakınsa pres, değilse pozisyon al
+          if (distToBall < 18) {
+            targetX = Math.max(base.x - 2, ballX - 3);
+            targetY = base.y + (ballY - base.y) * 0.6;
+          } else {
+            targetX = base.x - 2;
+            targetY = base.y + (ballY - base.y) * 0.2;
+          }
+        }
       } else if (p.position === 'FV') {
-        if (attacking) targetX += 8;
-        else targetX -= 4;
-        // Top ceza sahasına yakınsa FV kutuda durur
-        if (side === teamSide && match.ballPos.x > 70) targetX = mirror ? 92 : 92;
+        if (isMyBall) {
+          // Forvet: hücum et, top yakınsa koş, değilse bekle
+          if (distToBall < 25) {
+            targetX = Math.min(95, ballX + 5);
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else {
+            targetX = base.x + 8;
+            targetY = base.y + (ballY - base.y) * 0.3;
+          }
+        } else {
+          // Savunma: top yakınsa pres
+          if (distToBall < 22) {
+            targetX = Math.max(base.x - 4, ballX - 2);
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else {
+            targetX = base.x - 4;
+            targetY = base.y + (ballY - base.y) * 0.15;
+          }
+        }
       }
 
-      // Yumuşak hareket
-      const lerp = p.live.currentStamina < 30 ? 0.05 : 0.20;
+      // Yumuşak hareket (yorgunken yavaş)
+      const lerp = p.live.currentStamina < 30 ? 0.08 : 0.30;
       p.live.x += (targetX - p.live.x) * lerp;
       p.live.y += (targetY - p.live.y) * lerp;
     }

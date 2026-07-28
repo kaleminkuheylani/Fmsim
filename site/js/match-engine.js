@@ -189,34 +189,74 @@ function adjacentRole(role) {
 function updatePositions(match) {
   const ball = match.ballPos;
   const side = match.ballSide;
+  const carrier = match.ballCarrier;
   for (const teamSide of ["home", "away"]) {
     const team = match[teamSide];
     const mirror = teamSide === "away";
+    const isMyBall = side === teamSide;
     for (const p of team.players) {
       if (!p.onField) continue;
       const base = basePositionOf(p, match.formation[teamSide], mirror);
       if (!base) continue;
       let targetX = base.x;
       let targetY = base.y;
-      const attacking = side === teamSide;
-      const xDist = mirror ? ball.x - (100 - base.x) : ball.x - base.x;
+      const px = mirror ? 100 - p.live.x : p.live.x;
+      const py = p.live.y;
+      const ballX = ball.x;
+      const ballY = ball.y;
+      const distToBall = Math.hypot(px - ballX, py - ballY);
       if (p.position === "GK") {
-        if (attacking) targetX += 2;
-        else targetX += Math.max(0, 4 - Math.abs(xDist) / 10);
-        if (mirror) targetY = 35 + (ball.y - 35) * 0.2;
-        else targetY = 35 + (ball.y - 35) * 0.2;
+        targetX = isMyBall ? base.x + 2 : base.x - Math.max(0, 4 - distToBall / 10);
+        targetY = 35 + (ballY - 35) * 0.5;
       } else if (p.position === "DF") {
-        if (attacking) targetX += 5;
-        else targetX -= 3;
+        if (isMyBall) {
+          targetX = base.x + 5;
+          if (distToBall < 25) targetY = base.y + (ballY - base.y) * 0.3;
+        } else {
+          if (distToBall < 20) {
+            targetX = Math.max(base.x - 3, ballX - 5);
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else {
+            targetX = base.x - 3;
+            targetY = base.y + (ballY - base.y) * 0.15;
+          }
+        }
       } else if (p.position === "OS") {
-        if (attacking) targetX += 4;
-        else targetX -= 2;
+        if (isMyBall) {
+          targetX = base.x + 4;
+          if (distToBall < 20) {
+            targetX = base.x + 6;
+            targetY = base.y + (ballY - base.y) * 0.4;
+          }
+        } else {
+          if (distToBall < 18) {
+            targetX = Math.max(base.x - 2, ballX - 3);
+            targetY = base.y + (ballY - base.y) * 0.6;
+          } else {
+            targetX = base.x - 2;
+            targetY = base.y + (ballY - base.y) * 0.2;
+          }
+        }
       } else if (p.position === "FV") {
-        if (attacking) targetX += 8;
-        else targetX -= 4;
-        if (side === teamSide && match.ballPos.x > 70) targetX = mirror ? 92 : 92;
+        if (isMyBall) {
+          if (distToBall < 25) {
+            targetX = Math.min(95, ballX + 5);
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else {
+            targetX = base.x + 8;
+            targetY = base.y + (ballY - base.y) * 0.3;
+          }
+        } else {
+          if (distToBall < 22) {
+            targetX = Math.max(base.x - 4, ballX - 2);
+            targetY = base.y + (ballY - base.y) * 0.5;
+          } else {
+            targetX = base.x - 4;
+            targetY = base.y + (ballY - base.y) * 0.15;
+          }
+        }
       }
-      const lerp = p.live.currentStamina < 30 ? 0.05 : 0.2;
+      const lerp = p.live.currentStamina < 30 ? 0.08 : 0.3;
       p.live.x += (targetX - p.live.x) * lerp;
       p.live.y += (targetY - p.live.y) * lerp;
     }
@@ -2392,13 +2432,12 @@ function createSubstitution(match, options) {
 }
 
 // match/simulate.js
-var MAX_ACTIONS_PER_MINUTE = 3;
+var MAX_ACTIONS_PER_MINUTE = 6;
 function startMatch(match) {
   deployLineup(match.home, match.formation.home, false);
   deployLineup(match.away, match.formation.away, true);
   match.ballPos = { x: 50, y: 35 };
   match.ballSide = Math.random() < 0.5 ? "home" : "away";
-  if (!match.tactics) match.tactics = { home: "normal", away: "normal" };
   const side = match.ballSide;
   const team = match[side];
   const closest = team.players.filter((p) => p.onField).map((p) => ({ p, d: Math.hypot(p.live.x - 50, p.live.y - 35) })).sort((a, b) => a.d - b.d)[0];
@@ -2572,7 +2611,7 @@ function maybeFoul(match, carrier) {
     text: `${match.minute}' ${def.name} faul yapt\u0131!`
   };
   match.events.push(foulEv);
-  if (def.live.yellowCards >= 1 || Math.random() < 0.1) {
+  if (def.live.yellowCards >= 1 || Math.random() < 0.2) {
     const cardSide = match.ballSide === "home" ? "away" : "home";
     const cardResult = match.motivation ? match.motivation.giveCard(cardSide, def.id, "yellow") : null;
     if (cardResult) {
@@ -2595,7 +2634,7 @@ function maybeFoul(match, carrier) {
           match.narrativeLog.push({ minute: match.minute, type: "instant", text: t });
         }
       }
-      if (cardResult.kind === "yellow" && Math.random() < 5e-3) {
+      if (cardResult.kind === "yellow" && Math.random() < 0.01) {
         const redResult = match.motivation.giveCard(cardSide, def.id, "red");
         if (redResult) {
           match.events.push(redResult.event);
