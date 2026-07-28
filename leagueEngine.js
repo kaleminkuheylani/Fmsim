@@ -1,7 +1,7 @@
 // server/leagueEngine.js
 // Lig motoru — haftalar, puan durumu, AI maçları.
 
-import { League } from '../match/league.js';
+import { League } from './match/league.js';
 
 export function createLeague(userTeam = null) {
   const league = new League();

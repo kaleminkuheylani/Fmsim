@@ -1,9 +1,9 @@
 // server/teamFactory.js
 // Takım ve oyuncu üretimi (server tarafı).
 
-import { buildTeam } from '../match/teamBuilder.js';
-import { generateUniqueClubName, resetClubPool } from '../match/clubName.js';
-import { resetNamePool } from '../match/playerName.js';
+import { buildTeam } from './match/teamBuilder.js';
+import { generateUniqueClubName, resetClubPool } from './match/clubName.js';
+import { resetNamePool } from './match/playerName.js';
 
 export function createUserTeam(name = null) {
   resetNamePool();

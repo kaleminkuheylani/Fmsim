@@ -1,10 +1,10 @@
 // server/matchEngine.js
 // Maç motoru wrapper — match/ modüllerini kullanır.
 
-import { makeMatchState } from '../match/state.js';
-import { startMatch as startMatchOrig, simulateMinute } from '../match/simulate.js';
-import { generateUniqueName } from '../match/playerName.js';
-import { buildTeam } from '../match/teamBuilder.js';
+import { makeMatchState } from './match/state.js';
+import { startMatch as startMatchOrig, simulateMinute } from './match/simulate.js';
+import { generateUniqueName } from './match/playerName.js';
+import { buildTeam } from './match/teamBuilder.js';
 
 export function startMatch(gameState, opponentId) {
   const { userTeam, league } = gameState;

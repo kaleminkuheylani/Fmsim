@@ -1,7 +1,7 @@
 // server/transferEngine.js
 // Transfer motoru — piyasa, alım-satım.
 
-import { TransferMarket, calculatePlayerValue, calculateWage } from '../match/transfer.js';
+import { TransferMarket, calculatePlayerValue, calculateWage } from './match/transfer.js';
 
 export class TransferMarketSingleton {
   constructor() {
