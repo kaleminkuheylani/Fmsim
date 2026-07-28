@@ -27,6 +27,7 @@ let allEvents = [];
 let selectedInMatch = null;
 let lastRoute = '/';
 let lastReport = null;
+let currentPlayerId = null;
 
 // Maç 3 dakika sabit süre
 const MATCH_DURATION_SEC = 180; // saniye
@@ -159,6 +160,22 @@ const els = {
   stdSeason: $('std-season'),
   // dev
   devList: $('dev-list'),
+  // player page
+  playerPageName: $('player-page-name'),
+  phName: $('ph-name'),
+  phPos: $('ph-pos'),
+  phMeta: $('ph-meta'),
+  phRating: $('ph-rating'),
+  phGoals: $('ph-goals'),
+  phAssists: $('ph-assists'),
+  phMatches: $('ph-matches'),
+  phMoney: $('ph-money'),
+  phAttrs: $('ph-attrs'),
+  phRatingAvg: $('ph-rating-avg'),
+  phTrainArea: $('ph-train-area'),
+  phTrainBtn: $('ph-train-btn'),
+  phLastPerf: $('ph-last-perf'),
+  btnPlayerBack: $('btn-player-back'),
 };
 
 // === ROUTING ===
@@ -195,6 +212,7 @@ function applyRoute() {
   else if (route === '/development') renderDevelopmentPage();
   else if (route === '/match') renderMatchPage();
   else if (route === '/report') renderReport();
+  else if (route === '/player') renderPlayerPage();
   if (window.lucide) lucide.createIcons();
 }
 
@@ -214,6 +232,9 @@ function newGame() {
     p.potential = 50 + p.stars * 15 + Math.floor(Math.random() * 10);
     p.value = 1_000_000 + p.stars * 2_000_000 + Math.floor(Math.random() * 1_000_000);
     p.wage = 50_000 + p.stars * 50_000;
+    // Yıldız başına başlangıç kişisel parası
+    p.personalMoney = 100_000 + p.stars * 50_000;
+    p.goals = 0; p.assists = 0; p.matchesPlayed = 0; p.totalRating = 0;
   }
   game.league.setup(userTeam);
   game.league.userTeamId = 'user';
@@ -268,11 +289,13 @@ function saveGame() {
 function generateMarket() {
   resetNamePool();
   const market = { players: [] };
+  // Her seviyeye hitap: 1-5 yıldız
   const sizes = [
-    { count: 2, stars: 3, minAge: 24, maxAge: 32 },
-    { count: 4, stars: 2, minAge: 22, maxAge: 30 },
-    { count: 8, stars: 1, minAge: 18, maxAge: 23 },
-    { count: 6, stars: 1, minAge: 24, maxAge: 30 },
+    { count: 8, stars: 1, minAge: 17, maxAge: 30, valueMul: 0.5 },
+    { count: 6, stars: 2, minAge: 19, maxAge: 28, valueMul: 1.0 },
+    { count: 4, stars: 3, minAge: 22, maxAge: 30, valueMul: 2.5 },
+    { count: 2, stars: 4, minAge: 24, maxAge: 32, valueMul: 6.0 },
+    { count: 1, stars: 5, minAge: 26, maxAge: 32, valueMul: 15.0 },
   ];
   for (const size of sizes) {
     for (let i = 0; i < size.count; i++) {
@@ -280,11 +303,22 @@ function generateMarket() {
       const p = team.players[0];
       p.age = size.minAge + Math.floor(Math.random() * (size.maxAge - size.minAge));
       p.stars = size.stars;
-      p.potential = 50 + size.stars * 15 + Math.floor(Math.random() * 10);
-      p.value = 1_000_000 + size.stars * 2_000_000 + Math.floor(Math.random() * 3_000_000);
-      p.wage = 50_000 + size.stars * 50_000;
+      // Yıldız arttıkça hem potansiyel hem base ability yüksek
+      p.potential = 70 + size.stars * 12 + Math.floor(Math.random() * 8);
+      // Base attrs
+      if (p.attrs) {
+        for (const k in p.attrs) {
+          p.attrs[k] = Math.max(20, Math.min(p.potential, p.attrs[k] + (size.stars - 1) * 8));
+        }
+      }
+      // Fiyat: stars × çarpan
+      const baseValue = 800_000 + size.stars * 1_500_000 + Math.floor(Math.random() * 1_500_000);
+      p.value = Math.round(baseValue * size.valueMul);
+      p.wage = 30_000 + size.stars * 40_000;
       p.live = p.live || { x: 50, y: 35, currentStamina: 100, rating: 6.5 };
-      p.live.rating = 6.0 + size.stars + Math.random() * 0.5;
+      p.live.rating = 5.5 + size.stars * 0.6 + Math.random() * 0.4;
+      // Yıldız emojisi
+      p.starLabel = '★'.repeat(size.stars);
       market.players.push(p);
     }
   }
@@ -408,7 +442,7 @@ function renderSquad() {
 
 function playerItem(p, isBench) {
   const item = document.createElement('div');
-  item.className = 'player-item' + (isBench ? ' bench' : '');
+  item.className = 'player-item player-item-clickable' + (isBench ? ' bench' : '');
   if (p.live?.injured) item.classList.add('injured');
   if (p.live?.redCard) item.classList.add('red-card');
   const attrs = p.attrs || {};
@@ -418,11 +452,24 @@ function playerItem(p, isBench) {
     <div class="p-name">${p.name}${p.live?.injured ? ' 🏥' : ''}${p.live?.redCard ? ' 🟥' : ''}</div>
     <div class="p-age">${p.age}y</div>
     <div class="p-rating">${(p.live?.rating || 6.5).toFixed(1)}</div>
-    <div class="p-meta">${avg.toFixed(0)} pot</div>
+    <div class="p-meta">${avg.toFixed(0)} yetenek</div>
     <button class="p-swap" data-pid="${p.id}"><i data-lucide="refresh-cw"></i> Değiştir</button>
   `;
-  item.querySelector('.p-swap').addEventListener('click', () => openSubModal(p, isBench));
+  // İsim veya satıra tıklama → oyuncu detay sayfası
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.p-swap')) return;
+    openPlayerPage(p.id);
+  });
+  item.querySelector('.p-swap').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openSubModal(p, isBench);
+  });
   return item;
+}
+
+function openPlayerPage(pid) {
+  currentPlayerId = pid;
+  navigate('/player');
 }
 
 // === RENDER: STANDINGS ===
@@ -583,14 +630,17 @@ function trainPlayer(pid) {
   const attr = select.value;
   if (!player.attrs) player.attrs = {};
   const current = player.attrs[attr] || 50;
-  const potential = player.potential || 80;
+  // Potansiyel sınırı YOK — sadece paraya bak
+  const cost = 50_000; // her antrenman 50K €
 
-  if (current >= potential) {
-    alert(`${player.name} bu alanda potansiyel sınırına ulaşmış (${current}/${potential}).`);
+  if (!player.personalMoney) player.personalMoney = 0;
+  if (player.personalMoney < cost) {
+    alert(`${player.name} kişisel bütçesi yetersiz! (${formatMoney(player.personalMoney)} / ${formatMoney(cost)})\n\nMaçlarda iyi oynayarak para kazanabilir.`);
     return;
   }
 
-  player.attrs[attr] = Math.min(potential, current + 2);
+  player.personalMoney -= cost;
+  player.attrs[attr] = Math.min(99, current + 2); // 99 sert sınır
   game.trainingPoints--;
   saveGame();
   renderDevelopmentPage();
@@ -1057,11 +1107,68 @@ function endUserMatch() {
     fix.result = { homeScore: match.homeScore, awayScore: match.awayScore };
     updateStandings(fix);
     game.league.currentWeek += 1;
+
+    // Oyuncu performans ödülleri
+    distributePlayerEarnings(match);
+
     saveGame();
   }
   // Report sayfası
   lastReport = { match, fix };
   setTimeout(() => navigate('/report'), 500);
+}
+
+// Maç sonu: oyunculara para dağıt
+function distributePlayerEarnings(m) {
+  const userSide = selectedInMatch; // 'home' veya 'away'
+  const team = m[userSide];
+  if (!team?.players) return;
+  const events = m.events || [];
+  const isDraw = m.homeScore === m.awayScore;
+  const userWon = (userSide === 'home' && m.homeScore > m.awayScore) ||
+                  (userSide === 'away' && m.awayScore > m.homeScore);
+
+  for (const p of team.players) {
+    if (!p.live) continue;
+    p.matchesPlayed = (p.matchesPlayed || 0) + 1;
+    p.totalRating = (p.totalRating || 0) + (p.live.rating || 6.5);
+
+    let earned = 0;
+    let perfNote = [];
+
+    // Katılım primi
+    earned += 5_000;
+    perfNote.push('katılım 5K');
+
+    // Galibiyet/beraberlik primi
+    if (userWon) { earned += 15_000; perfNote.push('galibiyet 15K'); }
+    else if (isDraw) { earned += 5_000; perfNote.push('beraberlik 5K'); }
+
+    // Gol başı
+    for (const ev of events) {
+      if (ev.type === 'goal' && ev.scorer === p.id) {
+        earned += 30_000;
+        p.goals = (p.goals || 0) + 1;
+        perfNote.push('gol 30K');
+      }
+      // Asist (basit yaklaşım: goal event'inde target ile scorer farklıysa)
+      if (ev.type === 'goal' && ev.target === p.id && ev.scorer !== p.id) {
+        earned += 15_000;
+        p.assists = (p.assists || 0) + 1;
+        perfNote.push('asist 15K');
+      }
+    }
+
+    // Rating bonusu
+    const rating = p.live.rating || 6.5;
+    if (rating >= 8.5) { earned += 25_000; perfNote.push('yıldız 25K'); }
+    else if (rating >= 7.5) { earned += 10_000; perfNote.push('iyi 10K'); }
+    else if (rating < 6.0) { earned -= 5_000; perfNote.push('kötü -5K'); }
+
+    p.personalMoney = (p.personalMoney || 0) + earned;
+    p.lastEarned = earned;
+    p.lastPerfNote = perfNote.join(', ');
+  }
 }
 
 // === MAÇ RAPORU ===
@@ -1315,6 +1422,107 @@ els.btnInjuryOk?.addEventListener('click', () => {
   els.injuryNoticeModal.style.display = 'none';
 });
 
+// === OYUNCU DETAY SAYFASI ===
+function renderPlayerPage() {
+  if (!game || !currentPlayerId) {
+    navigate('/squad');
+    return;
+  }
+  const user = getUserTeam();
+  if (!user) return;
+  const p = user.players.find(x => x.id === currentPlayerId);
+  if (!p) {
+    navigate('/squad');
+    return;
+  }
+
+  els.playerPageName.textContent = p.name;
+  els.phName.textContent = p.name;
+  els.phPos.textContent = p.position;
+  const ageCat = p.age < 23 ? '🟢 Yükselişte' : p.age < 28 ? '🔵 Zirve' : p.age < 32 ? '🟡 Düşüşte' : '🔴 Son yıllar';
+  els.phMeta.textContent = `${p.age}y · ${p.position} · ⭐ ${p.stars || 1} · ${ageCat}`;
+
+  const rating = computePlayerRating(p);
+  els.phRating.textContent = rating.toFixed(1);
+  els.phGoals.textContent = p.goals || 0;
+  els.phAssists.textContent = p.assists || 0;
+  els.phMatches.textContent = p.matchesPlayed || 0;
+  els.phMoney.textContent = formatMoney(p.personalMoney || 0);
+
+  // Yetenekler
+  const weights = ROLE_WEIGHTS[p.position] || {};
+  const areaLabels = {
+    passing: 'Pas', shooting: 'Şut', tackling: 'Müdahale', dribbling: 'Dribling',
+    finishing: 'Bitiricilik', crossing: 'Orta', composure: 'Sükunet', vision: 'Vizyon',
+    decisions: 'Karar', firstTouch: 'İlk Dokunuş', reflexes: 'Refleks', agility: 'Çeviklik',
+    pace: 'Hız', longShots: 'Uzun Şut', interception: 'Kesiş', aerial: 'Hava Topu',
+    marking: 'Markaj', positioning: 'Pozisyon', leadership: 'Liderlik',
+    aggression: 'Agresiflik', flair: 'Yaratıcılık',
+  };
+  els.phAttrs.innerHTML = '';
+  const attrs = Object.entries(p.attrs || {})
+    .map(([k, v]) => ({ k, v, w: weights[k] || 1.0, label: areaLabels[k] || k }))
+    .sort((a, b) => (b.v * b.w) - (a.v * a.w));
+  for (const a of attrs) {
+    const row = document.createElement('div');
+    row.className = 'pd-attr';
+    row.innerHTML = `
+      <div class="pda-label">${a.label}${a.w > 1.2 ? ' ★' : a.w < 0.9 ? ' ·' : ''}</div>
+      <div class="pda-bar"><div class="pda-fill" style="width: ${a.v}%; background: ${a.w > 1.2 ? 'var(--accent)' : a.w < 0.9 ? 'var(--text-faint)' : 'var(--info)'}"></div></div>
+      <div class="pda-val">${a.v}</div>
+    `;
+    els.phAttrs.appendChild(row);
+  }
+  els.phRatingAvg.textContent = `Pozisyona özgü: ${rating.toFixed(1)}`;
+
+  // Antrenman dropdown
+  const trainingAreas = {
+    GK: ['reflexes', 'positioning', 'composure', 'passing', 'leadership'],
+    DF: ['tackling', 'marking', 'interception', 'aerial', 'positioning'],
+    OS: ['passing', 'vision', 'decisions', 'dribbling', 'firstTouch'],
+    FV: ['finishing', 'shooting', 'composure', 'pace', 'firstTouch'],
+  };
+  const areas = trainingAreas[p.position] || ['passing'];
+  els.phTrainArea.innerHTML = areas.map(a => `<option value="${a}">${areaLabels[a] || a}</option>`).join('');
+
+  // Son maç performansı
+  if (p.lastEarned !== undefined) {
+    const sign = p.lastEarned >= 0 ? '+' : '';
+    const color = p.lastEarned >= 0 ? 'var(--good)' : 'var(--bad)';
+    els.phLastPerf.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="font-size: 24px; font-weight: 800; color: ${color};">${sign}${formatMoney(p.lastEarned)}</div>
+        <div class="muted" style="font-size: 12px;">${p.lastPerfNote || ''}</div>
+      </div>
+    `;
+  } else {
+    els.phLastPerf.textContent = 'Henüz maç oynamadı.';
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+els.btnPlayerBack?.addEventListener('click', () => navigate('/squad'));
+els.phTrainBtn?.addEventListener('click', () => {
+  if (!currentPlayerId) return;
+  const user = getUserTeam();
+  const p = user?.players.find(x => x.id === currentPlayerId);
+  if (!p) return;
+  const area = els.phTrainArea.value;
+  if (!p.attrs) p.attrs = {};
+  const current = p.attrs[area] || 50;
+  const cost = 50_000;
+  if (!p.personalMoney) p.personalMoney = 0;
+  if (p.personalMoney < cost) {
+    alert(`Yetersiz kişisel bütçe! (${formatMoney(p.personalMoney)} / ${formatMoney(cost)})`);
+    return;
+  }
+  p.personalMoney -= cost;
+  p.attrs[area] = Math.min(99, current + 2);
+  saveGame();
+  renderPlayerPage();
+});
+
 // === TRANSFER ===
 function buyPlayer(p) {
   const user = getUserTeam();
@@ -1434,6 +1642,11 @@ import('./js/match-engine.js').then(mod => {
     league.userTeamId = 'user';
     deployLineupToTeam(userTeam);
     game = { league, transferMarket: generateMarket(), trainingPoints: 5, lastTrainingWeek: -1 };
+    // Yeni oyun: tüm oyunculara başlangıç kişisel parası + istatistik
+    for (const p of userTeam.players) {
+      p.personalMoney = 100_000 + p.stars * 50_000;
+      p.goals = 0; p.assists = 0; p.matchesPlayed = 0; p.totalRating = 0;
+    }
     saveGame();
   }
   els.searchClear.style.display = 'none';
