@@ -293,6 +293,29 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .op-info-item .op-val.danger { color: var(--bad); }
 .op-info-item .op-val.warn { color: var(--warn); }
 
+/* === ASİNALIK === */
+.pd-affinity { display: flex; flex-direction: column; gap: 6px; }
+.aff-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px; background: var(--bg-2); border-radius: 4px;
+  font-size: 12px;
+}
+.aff-pos {
+  font-size: 9px; font-weight: 700; background: var(--panel-2);
+  padding: 1px 4px; border-radius: 2px; min-width: 24px; text-align: center;
+  color: var(--text-dim);
+}
+.aff-name { flex: 1; }
+.aff-bar {
+  width: 60px; height: 6px; background: var(--bg-1);
+  border-radius: 3px; overflow: hidden;
+}
+.aff-fill { display: block; height: 100%; }
+.aff-fill.high { background: var(--ok, #10b981); }
+.aff-fill.mid { background: var(--warn, #f59e0b); }
+.aff-fill.low { background: var(--text-faint); }
+.aff-val { font-size: 11px; color: var(--text-dim); min-width: 24px; text-align: right; font-variant-numeric: tabular-nums; }
+
 /* === MATCHBOARD === */
 .matchboard {
   display: grid; grid-template-columns: 1fr 130px 1fr;

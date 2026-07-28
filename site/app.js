@@ -188,6 +188,7 @@ const els = {
   phMoney: $('ph-money'),
   phAttrs: $('ph-attrs'),
   phRatingAvg: $('ph-rating-avg'),
+  phAffinity: $('ph-affinity'),
   phTrainArea: $('ph-train-area'),
   phTrainBtn: $('ph-train-btn'),
   phLastPerf: $('ph-last-perf'),
@@ -2041,6 +2042,36 @@ function renderPlayerPage() {
     els.phAttrs.appendChild(row);
   }
   els.phRatingAvg.textContent = `Pozisyona özgü: ${rating.toFixed(1)}`;
+
+  // Asinalık: en yakın 3 arkadaş
+  if (els.phAffinity) {
+    els.phAffinity.innerHTML = '';
+    const aff = p.affinity || {};
+    const teammates = Object.entries(aff)
+      .map(([tid, v]) => {
+        const mate = user.players.find(x => x.id === tid);
+        return mate ? { name: mate.name, pos: mate.position, value: v } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 3);
+    if (teammates.length === 0) {
+      els.phAffinity.innerHTML = '<div class="muted" style="font-size:11px">Henüz yakın arkadaş yok — maç oyna</div>';
+    } else {
+      for (const t of teammates) {
+        const item = document.createElement('div');
+        item.className = 'aff-item';
+        const tier = t.value > 70 ? 'high' : t.value > 30 ? 'mid' : 'low';
+        item.innerHTML = `
+          <span class="aff-pos">${t.pos}</span>
+          <span class="aff-name">${t.name}</span>
+          <span class="aff-bar"><span class="aff-fill ${tier}" style="width:${t.value}%"></span></span>
+          <span class="aff-val">${t.value.toFixed(0)}</span>
+        `;
+        els.phAffinity.appendChild(item);
+      }
+    }
+  }
 
   // Antrenman dropdown
   const trainingAreas = {
