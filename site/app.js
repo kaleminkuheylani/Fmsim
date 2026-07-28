@@ -99,6 +99,11 @@ const els = {
   wfWeek: $('wf-week'),
   wfList: $('wf-list'),
   recentResults: $('recent-results'),
+  // opponent info
+  oppTeamName: $('opp-team-name'),
+  oppTeamMeta: $('opp-team-meta'),
+  oppLineup: $('opp-lineup'),
+  oppInfo: $('opp-info'),
   // match page
   homeName: $('home-name'),
   awayName: $('away-name'),
@@ -379,6 +384,9 @@ function renderHome() {
   // Teklifler
   renderOffers();
 
+  // Sonraki rakip
+  renderOpponentInfo();
+
   const userMatch = getUserMatchThisWeek();
   if (userMatch) {
     const home = game.league.teams.find(t => t.id === userMatch.homeId);
@@ -568,6 +576,71 @@ function getRandomOpponentClubName() {
   if (!game?.league?.teams) return 'Bilinmeyen FK';
   const aiTeams = game.league.teams.filter(t => t.id !== 'user');
   return aiTeams[Math.floor(Math.random() * aiTeams.length)]?.name || 'Bilinmeyen FK';
+}
+
+// === RENDER: SONRAKI RAKİP KADROSU ===
+function renderOpponentInfo() {
+  if (!els.oppLineup) return;
+  const opp = getOpponentTeam();
+  if (!opp) {
+    els.oppTeamName.textContent = '—';
+    els.oppTeamMeta.textContent = '—';
+    els.oppLineup.innerHTML = '<div class="empty">Sezon arası — rakip yok</div>';
+    if (els.oppInfo) els.oppInfo.innerHTML = '';
+    return;
+  }
+
+  els.oppTeamName.textContent = opp.shortName || opp.name;
+  const style = opp.style || 'agresif';
+  const power = opp.power || 3;
+  const styleLabels = { agresif: '🔥', kontra: '⚡', normal: '⚖️', kanat: '↔️', merkez: '🎯', defansif: '🛡️' };
+  const powerStars = '★'.repeat(power) + '☆'.repeat(5 - power);
+  els.oppTeamMeta.textContent = `${styleLabels[style] || ''} ${style.toUpperCase()} · ${powerStars}`;
+
+  // İlk 11
+  const lineup = opp.players.filter(p => p.onField);
+  els.oppLineup.innerHTML = '';
+  // Pozisyona göre sırala
+  const posOrder = { GK: 1, DF: 2, OS: 3, FV: 4 };
+  lineup.sort((a, b) => (posOrder[a.position] || 5) - (posOrder[b.position] || 5));
+  for (const p of lineup.slice(0, 11)) {
+    const item = document.createElement('div');
+    let cls = 'opp-player';
+    let status = '';
+    if (p.live?.injured) { cls += ' injured'; status = '🏥'; }
+    else if (p.live?.suspended) { cls += ' suspended'; status = '🟥'; }
+    item.className = cls;
+    item.innerHTML = `
+      <span class="op-pos">${p.position}</span>
+      <span class="op-name">${p.name}</span>
+      <span class="op-status">${status}</span>
+    `;
+    els.oppLineup.appendChild(item);
+  }
+
+  // İstatistik: sakat, cezalı, ortalama rating
+  const injured = lineup.filter(p => p.live?.injured).length;
+  const suspended = lineup.filter(p => p.live?.suspended).length;
+  const avgRating = lineup.length ? (lineup.reduce((s, p) => s + (p.live?.rating || 6.5), 0) / lineup.length) : 6.5;
+  const topScorer = [...lineup].sort((a, b) => (b.goals || 0) - (a.goals || 0))[0];
+  if (els.oppInfo) {
+    els.oppInfo.innerHTML = `
+      <div class="op-info-grid">
+        <div class="op-info-item">
+          <div class="op-label">Ort Rating</div>
+          <div class="op-val">${avgRating.toFixed(1)}</div>
+        </div>
+        <div class="op-info-item">
+          <div class="op-label">Sakat</div>
+          <div class="op-val ${injured > 0 ? 'warn' : ''}">${injured}</div>
+        </div>
+        <div class="op-info-item">
+          <div class="op-label">Cezalı</div>
+          <div class="op-val ${suspended > 0 ? 'danger' : ''}">${suspended}</div>
+        </div>
+      </div>
+    `;
+  }
 }
 
 // === RENDER: SQUAD ===
@@ -1032,8 +1105,8 @@ function playWeek(skip = false) {
   if (next > 34) { endSeason(); return; }
   stopTimer();
 
-  // Sakatlık iyileşmesi + ceza sıfırlama
-  recoverPlayers(next);
+  // Tüm takımlar: sakatlık iyileşmesi + ceza sıfırlama + yeni sakatlık üret
+  applyWeeklyStatusChanges(next);
 
   // CPU teklifleri üret
   generateOffers(next);
@@ -1296,28 +1369,63 @@ function tick() {
 }
 
 // Her hafta başı: sakatlık iyileşmesi + ceza sıfırlama
-function recoverPlayers(currentWeek) {
-  const user = getUserTeam();
-  if (!user) return;
+function applyWeeklyStatusChanges(currentWeek) {
+  if (!game?.league?.teams) return;
   const recoveries = [];
-  for (const p of user.players) {
-    if (!p.live) continue;
-    // Sakatlık iyileşmesi
-    if (p.live.injured && p.live.injuryReturn && currentWeek >= p.live.injuryReturn) {
-      p.live.injured = false;
-      p.live.injuryWeeks = 0;
-      p.live.injuryReturn = 0;
-      recoveries.push(`✅ ${p.name} sakatlıktan döndü!`);
+  for (const team of game.league.teams) {
+    for (const p of team.players) {
+      if (!p.live) continue;
+      // Sakatlık iyileşmesi
+      if (p.live.injured && p.live.injuryReturn && currentWeek >= p.live.injuryReturn) {
+        p.live.injured = false;
+        p.live.injuryWeeks = 0;
+        p.live.injuryReturn = 0;
+        if (team.id === 'user') recoveries.push(`✅ ${p.name} sakatlıktan döndü!`);
+      }
+      // Cezalı oyuncu sıfırlama
+      if (p.live.suspended) {
+        p.live.suspended = false;
+        p.live.redCard = false;
+      }
     }
-    // Cezalı oyuncu sıfırlama (kırmızı kart / 5 sarı birikim cezası — sadece bu maç)
-    if (p.live.suspended) {
-      p.live.suspended = false;
-      p.live.redCard = false;
+  }
+  // Tüm takımlar: rastgele sakatlık üretimi (hafif)
+  for (const team of game.league.teams) {
+    // Haftada 1-2 sakatlık, tüm takımda
+    const numInjuries = Math.random() < 0.4 ? (1 + Math.floor(Math.random() * 2)) : 0;
+    for (let i = 0; i < numInjuries; i++) {
+      const available = team.players.filter(p => p.onField && !p.live?.injured);
+      if (!available.length) break;
+      const player = available[Math.floor(Math.random() * available.length)];
+      player.live = player.live || {};
+      const weeks = 1 + Math.floor(Math.random() * 3); // 1-3 hafta
+      player.live.injured = true;
+      player.live.injuryWeeks = weeks;
+      player.live.injuryReturn = currentWeek + weeks;
+      player.live.yellowCount = 0;
+    }
+    // Sarı kart birikimi: haftada %5 ihtimalle bir oyuncu 1 sarı alır (5 birikim → ceza)
+    if (Math.random() < 0.05) {
+      const available = team.players.filter(p => p.onField && !p.live?.injured && !p.live?.suspended);
+      if (available.length) {
+        const player = available[Math.floor(Math.random() * available.length)];
+        player.live = player.live || {};
+        player.live.yellowCount = (player.live.yellowCount || 0) + 1;
+        if (player.live.yellowCount >= 5) {
+          player.live.suspended = true;
+          player.live.yellowCount = 0;
+        }
+      }
     }
   }
   if (recoveries.length && lastReport) {
     lastReport.recoveries = (lastReport.recoveries || []).concat(recoveries);
   }
+}
+
+// Geriye uyumluluk
+function recoverPlayers(currentWeek) {
+  applyWeeklyStatusChanges(currentWeek);
 }
 
 // Skip: tüm maçı 5 saniyede bitir

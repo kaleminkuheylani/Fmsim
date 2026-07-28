@@ -265,6 +265,34 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .recent-item .ri-score { text-align: right; font-weight: 600; }
 .empty { padding: 16px; text-align: center; color: var(--text-faint); font-size: 12px; }
 
+/* === RAKİP KADROSU === */
+.opp-lineup { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.opp-player {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.opp-player.injured { opacity: 0.5; }
+.opp-player.suspended { opacity: 0.5; border-left: 2px solid var(--bad); }
+.opp-player .op-pos {
+  font-size: 9px; font-weight: 700; background: var(--panel-2);
+  padding: 1px 4px; border-radius: 2px; min-width: 22px; text-align: center;
+}
+.opp-player .op-name { flex: 1; font-weight: 500; }
+.opp-player .op-status { font-size: 10px; }
+.op-info-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.op-info-item { text-align: center; }
+.op-info-item .op-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.op-info-item .op-val { font-size: 18px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.op-info-item .op-val.danger { color: var(--bad); }
+.op-info-item .op-val.warn { color: var(--warn); }
+
 /* === MATCHBOARD === */
 .matchboard {
   display: grid; grid-template-columns: 1fr 130px 1fr;
