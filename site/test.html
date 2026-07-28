@@ -6,6 +6,7 @@
 <title>Match Engine — Test Ekranı</title>
 <link rel="stylesheet" href="styles.css" />
 <script src="https://unpkg.com/lucide@1.22.0/dist/umd/lucide.min.js"></script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><circle cx=%2212%22 cy=%2212%22 r=%2210%22 fill=%22%23f59e0b%22 stroke=%22%23fff%22 stroke-width=%222%22/></svg>" />
 <style>
   /* === TEST PAGE — sadece bu sayfa için === */
   body { background: #0a0e1a; color: #e5e7eb; }
@@ -488,11 +489,14 @@
       for (const n of r.opening) list.innerHTML += narrativeItemHtml(n);
     }
     refreshIcons();
+    // UX: maç başladı izlenimi için otomatik pilot başlat (kullanıcı pause edebilir)
+    setTimeout(() => startAuto(), 400);
   }
 
   async function tick(count) {
     if (!state.match || state.match.finished) return;
-    stopAuto();
+    // NOT: stopAuto() burada çağrılmıyor — auto modunda pilot kendini durdurmamalı.
+    // Auto'yu durdurmak için: Duraklat butonu, maç sonu, veya reset.
     const r = await api(`/api/test/tick?count=${count}`);
     if (!r.ok) { alert('Hata: ' + r.error); return; }
     state.match = r.match;
@@ -502,7 +506,7 @@
 
   async function runTo(target) {
     if (!state.match || state.match.finished) return;
-    stopAuto();
+    // stopAuto() çağrılmıyor (yukarıdaki tick not'una bak)
     const r = await api(`/api/test/run?untilMinute=${target}`);
     if (!r.ok) { alert('Hata: ' + r.error); return; }
     state.match = r.match;
