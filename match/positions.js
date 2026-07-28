@@ -351,18 +351,34 @@ export function updatePositions(match) {
       targetX = Math.max(2, Math.min(98, targetX));
       targetY = Math.max(2, Math.min(68, targetY));
 
-      // === SPACING: aynı takımdaki oyuncular birbirine 8m+ mesafede olmalı ===
-      // (iç içe girmesin — formationPos.y'ye göre spacing)
+      // === SPACING: kompakt dizilim (X+Y komşu kontrolü) ===
+      // Oyuncular birbirine min 7m mesafede olmalı. Yakınsa hem X hem Y'de
+      // dışa doğru iter (formationPos'a göre yön). Sıralı iter — her çakışma
+      // ayrı kontrol edilir, böylece 3+ oyuncu aynı noktada toplanmaz.
       const teamMates = team.players.filter(t => t.onField && t.id !== p.id);
-      for (const tm of teamMates) {
-        const d = Math.hypot(tm.live.x - targetX, tm.live.y - targetY);
-        if (d < 8 && d > 0.1) {
-          // Çok yakın — formationPos y'ye göre dışa doğru kay
-          const direction = (base.y >= 35) ? 1 : -1;
-          if (targetY < 5 || targetY > 65) break; // sınırda
-          targetY += direction * Math.min(2, (8 - d) * 0.6);
+      const SPACING_MIN = 7.0;
+      for (let iter = 0; iter < 3; iter++) {
+        let pushed = false;
+        for (const tm of teamMates) {
+          const dxT = targetX - tm.live.x;
+          const dyT = targetY - tm.live.y;
+          const d = Math.hypot(dxT, dyT);
+          if (d < SPACING_MIN && d > 0.1) {
+            // İtme yönü: oyuncudan uzağa (formationPos'a göre normalize)
+            const pushX = dxT / d;
+            const pushY = dyT / d;
+            // Hedef mesafeye ulaşana dek it
+            const need = SPACING_MIN - d;
+            targetX += pushX * need * 0.5;
+            targetY += pushY * need * 0.5;
+            pushed = true;
+          }
         }
+        if (!pushed) break; // çakışma yok, çık
       }
+      // Sınırı tekrar uygula (itme sonrası sahadan çıkmış olabilir)
+      targetX = Math.max(3, Math.min(97, targetX));
+      targetY = Math.max(3, Math.min(67, targetY));
 
       const dx = targetX - p.live.x;
       const dy = targetY - p.live.y;
