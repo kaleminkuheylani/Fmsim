@@ -29,14 +29,23 @@ PORT=8080 npm start
 
 ## Build
 
-Frontend bundle'ı esbuild ile:
+Frontend bundle'ı (`site/js/match-engine.js`) repoda prebuilt olarak commit'li,
+bu yüzden Railway / production build no-op:
 
 ```bash
 npm run build
+# → "No-op: site/js/match-engine.js is pre-bundled and committed..."
 ```
 
-Bu komut `site/js/entry.js` dosyasını alıp `site/js/match-engine.js`
-olarak ESM formatında paketler.
+`site/js/entry.js` dosyasında değişiklik yaptıysan bundle'ı manuel olarak
+yeniden üret:
+
+```bash
+npm run bundle
+```
+
+Bu komut `entry.js` dosyasını alıp `site/js/match-engine.js` olarak ESM
+formatında paketler. Üretilen dosyayı repoya commit et.
 
 ## Railway Deploy
 

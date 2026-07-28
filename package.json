@@ -7,9 +7,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "build": "esbuild site/js/entry.js --bundle --format=esm --outfile=site/js/match-engine.js --target=es2020"
+    "build": "echo 'No-op: site/js/match-engine.js is pre-bundled and committed. Use npm run bundle to regenerate.'",
+    "bundle": "esbuild site/js/entry.js --bundle --format=esm --outfile=site/js/match-engine.js --target=es2020"
   },
   "engines": {
     "node": "20.x"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }
