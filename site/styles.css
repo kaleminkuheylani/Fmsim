@@ -658,9 +658,15 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .modal {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.7);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   z-index: 100;
   backdrop-filter: blur(4px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+}
+@media (min-width: 600px) {
+  .modal { align-items: center; }
 }
 .modal[style*="display:none"] { display: none; }
 .modal-box {
@@ -670,7 +676,15 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
   padding: 24px;
   max-width: 480px;
   width: 90%;
+  max-height: 90vh;
+  height: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .modal-box { width: 96%; max-height: 92vh; padding: 16px; }
 }
 .modal-icon { text-align: center; color: var(--bad); margin-bottom: 12px; }
 .modal-icon i { width: 36px; height: 36px; }
@@ -891,6 +905,12 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .tactics-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
+}
+@media (max-width: 600px) {
+  .tactics-grid { grid-template-columns: 1fr 1fr; }
+  .tactic-option { padding: 8px 6px; }
+  .tactic-name { font-size: 11px; }
+  .tactic-desc { font-size: 9px; }
 }
 .tactic-option {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -1156,9 +1176,10 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
 .lineup-mini-pitch {
   position: relative;
   width: 100%;
-  max-width: 360px;
+  max-width: 180px;
   margin: 0 auto;
   aspect-ratio: 7 / 10;
+  max-height: 240px;
   background:
     linear-gradient(180deg,
       #2d6a4f 0%, #2d6a4f 8%,
@@ -1179,7 +1200,7 @@ i[data-lucide] { display: inline-block; vertical-align: -2px; }
   transform: translate(-50%, -50%);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  width: 38px; height: 38px;
+  width: 28px; height: 28px;
   z-index: 2;
 }
 .lmp-chip {
