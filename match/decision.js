@@ -67,7 +67,7 @@ function shouldShoot(player, match) {
   // GK asla şut çekmez
   if (player.position === 'GK') return false;
 
-  // Şut aralığı (intelligence + taktik + pozisyon) — gerçekçi 15-30m
+  // Şut aralığı (intelligence + taktik + pozisyon) — gerçekçi 18-30m
   const tactic = TACTIC_THRESHOLDS[match.tactics?.[side]?.id || 'normal'];
   let shootRange = 18 + (intel - 50) / 5 + tactic.shootRange; // 8-28 arası
   if (player.position === 'FV') shootRange += 8; // FV 16-36m

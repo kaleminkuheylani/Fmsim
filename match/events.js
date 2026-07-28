@@ -208,14 +208,14 @@ function resolveCross(match, carrier) {
 // Gerçek maç verilerine dayalı: mesafe + açı + şut tipi
 // Kaynak: StatsBomb, Opta, Understat (2020-2024 lig ortalamaları)
 function calcXG(distance, angle, shotType) {
-  // Mesafe bazlı temel xG (gerçek veriye yakın)
+  // Mesafe bazlı temel xG (Fmsim dengesi — gerçek maçlardan biraz yüksek)
   let xG;
-  if (distance < 6)        xG = 0.50;  // altıpas — net pozisyon
-  else if (distance < 11)  xG = 0.30;  // ceza sahası içi
-  else if (distance < 16.5)xG = 0.15;  // ceza sahası kenarı
-  else if (distance < 22)  xG = 0.07;  // ceza sahası dışı yakın
-  else if (distance < 30)  xG = 0.03;  // orta saha
-  else                     xG = 0.01;  // uzak (neredeyse imkansız)
+  if (distance < 6)        xG = 0.85;  // altıpas — net pozisyon
+  else if (distance < 11)  xG = 0.60;  // ceza sahası içi
+  else if (distance < 16.5)xG = 0.40;  // ceza sahası kenarı
+  else if (distance < 22)  xG = 0.25;  // ceza sahası dışı yakın
+  else if (distance < 30)  xG = 0.15;  // orta saha
+  else                     xG = 0.08;  // uzak
 
   // Açı ayarı (dar açı = kötü şut pozisyonu)
   if (angle < 30 || angle > 150) xG *= 0.3;   // çok dar
@@ -272,8 +272,8 @@ function resolveShoot(match, carrier) {
   const reflexes = keeper.attrs?.reflexes || 50;
   const positioning = keeper.attrs?.positioning || 50;
   const saveQuality = reflexes * 0.6 + positioning * 0.4;
-  // 50 yetenek = 1.0x, 100 yetenek = 0.5x (daha az avantajlı kaleci)
-  const saveMult = 1.0 - (saveQuality / 100) * 0.5;
+  // 50 yetenek = 1.0x, 100 yetenek = 0.6x (kaleci standart avantaj)
+  const saveMult = 1.0 - (saveQuality / 100) * 0.4;
   const saveAdjustedXG = Math.max(0.02, effectiveXG * saveMult);
 
   // SONUÇ: GOL MÜ, KURTARIŞ MI?
