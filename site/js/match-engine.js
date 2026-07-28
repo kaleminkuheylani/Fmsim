@@ -213,25 +213,33 @@ function updatePositions(match) {
           targetX = base.x + 5;
           if (distToBall < 25) targetY = base.y + (ballY - base.y) * 0.3;
         } else {
-          if (distToBall < 20) {
-            targetX = Math.max(base.x - 3, ballX - 5);
-            targetY = base.y + (ballY - base.y) * 0.5;
+          if (distToBall < 10) {
+            targetX = ballX;
+            targetY = ballY;
+          } else if (distToBall < 20) {
+            targetX = Math.max(base.x - 3, ballX - 3);
+            targetY = base.y + (ballY - base.y) * 0.7;
           } else {
             targetX = base.x - 3;
-            targetY = base.y + (ballY - base.y) * 0.15;
+            targetY = base.y + (ballY - base.y) * 0.2;
           }
         }
       } else if (p.position === "OS") {
         if (isMyBall) {
-          targetX = base.x + 4;
-          if (distToBall < 20) {
-            targetX = base.x + 6;
+          if (distToBall < 10) {
+            targetX = ballX + (mirror ? -3 : 3);
+            targetY = ballY + (Math.random() - 0.5) * 8;
+          } else {
+            targetX = base.x + 5;
             targetY = base.y + (ballY - base.y) * 0.4;
           }
         } else {
-          if (distToBall < 18) {
+          if (distToBall < 10) {
+            targetX = ballX;
+            targetY = ballY;
+          } else if (distToBall < 18) {
             targetX = Math.max(base.x - 2, ballX - 3);
-            targetY = base.y + (ballY - base.y) * 0.6;
+            targetY = base.y + (ballY - base.y) * 0.8;
           } else {
             targetX = base.x - 2;
             targetY = base.y + (ballY - base.y) * 0.2;
@@ -239,25 +247,28 @@ function updatePositions(match) {
         }
       } else if (p.position === "FV") {
         if (isMyBall) {
-          if (distToBall < 25) {
+          if (distToBall < 15) {
             targetX = Math.min(95, ballX + 5);
-            targetY = base.y + (ballY - base.y) * 0.5;
+            targetY = base.y + (ballY - base.y) * 0.6;
           } else {
             targetX = base.x + 8;
-            targetY = base.y + (ballY - base.y) * 0.3;
+            targetY = base.y + (ballY - base.y) * 0.4;
           }
         } else {
-          if (distToBall < 22) {
+          if (distToBall < 10) {
+            targetX = ballX;
+            targetY = ballY;
+          } else if (distToBall < 22) {
             targetX = Math.max(base.x - 4, ballX - 2);
-            targetY = base.y + (ballY - base.y) * 0.5;
+            targetY = base.y + (ballY - base.y) * 0.7;
           } else {
             targetX = base.x - 4;
-            targetY = base.y + (ballY - base.y) * 0.15;
+            targetY = base.y + (ballY - base.y) * 0.2;
           }
         }
       }
       const speedBase = p.position === "GK" ? 0.6 : p.position === "DF" ? 0.9 : p.position === "OS" ? 1.1 : 1.3;
-      const urgency = distToBall < 15 ? 1.6 : distToBall < 25 ? 1.2 : distToBall < 40 ? 0.9 : 0.6;
+      const urgency = distToBall < 8 ? 2.2 : distToBall < 15 ? 1.7 : distToBall < 25 ? 1.2 : distToBall < 40 ? 0.9 : 0.6;
       const staminaFactor2 = (p.live.currentStamina || 100) < 30 ? 0.5 : 1;
       const speed = speedBase * urgency * staminaFactor2;
       const dx = targetX - p.live.x;

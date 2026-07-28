@@ -160,53 +160,74 @@ export function updatePositions(match) {
           // Top kanattaysa kanada kay
           if (distToBall < 25) targetY = base.y + (ballY - base.y) * 0.3;
         } else {
-          // Savunuyoruz: top yakınsa araya girmeye çalış
-          if (distToBall < 20) {
-            // Topun biraz önüne geç
-            targetX = Math.max(base.x - 3, ballX - 5);
-            targetY = base.y + (ballY - base.y) * 0.5;
+          // Savunuyoruz: topa agresif tepki
+          if (distToBall < 10) {
+            // Çok yakın: topu kovala (sürekli topun üstüne)
+            targetX = ballX;
+            targetY = ballY;
+          } else if (distToBall < 20) {
+            // Mid: topun yolunu kes
+            targetX = Math.max(base.x - 3, ballX - 3);
+            targetY = base.y + (ballY - base.y) * 0.7;
           } else {
+            // Uzak: savunma pozisyonu
             targetX = base.x - 3;
-            targetY = base.y + (ballY - base.y) * 0.15;
+            targetY = base.y + (ballY - base.y) * 0.2;
           }
         }
       } else if (p.position === 'OS') {
         if (isMyBall) {
-          // Hücum: pas opsiyonu oluştur, öne çık
-          targetX = base.x + 4;
-          // Top yakınsa topa desteğe gel
-          if (distToBall < 20) {
-            targetX = base.x + 6;
+          // Hücum: pas opsiyonu oluştur, topa desteğe gel
+          if (distToBall < 10) {
+            // Çok yakın: pas opsiyonu için kısa mesafe
+            targetX = ballX + (mirror ? -3 : 3);
+            targetY = ballY + (Math.random() - 0.5) * 8;
+          } else {
+            targetX = base.x + 5;
             targetY = base.y + (ballY - base.y) * 0.4;
           }
         } else {
-          // Savunma: top yakınsa pres, değilse pozisyon al
-          if (distToBall < 18) {
+          // Savunma: topa agresif pres
+          if (distToBall < 10) {
+            // Çok yakın: pres
+            targetX = ballX;
+            targetY = ballY;
+          } else if (distToBall < 18) {
+            // Mid: topun yolunu kes
             targetX = Math.max(base.x - 2, ballX - 3);
-            targetY = base.y + (ballY - base.y) * 0.6;
+            targetY = base.y + (ballY - base.y) * 0.8;
           } else {
+            // Uzak: pozisyon al
             targetX = base.x - 2;
             targetY = base.y + (ballY - base.y) * 0.2;
           }
         }
       } else if (p.position === 'FV') {
         if (isMyBall) {
-          // Forvet: hücum et, top yakınsa koş, değilse bekle
-          if (distToBall < 25) {
+          // Forvet: hücum et
+          if (distToBall < 15) {
+            // Yakın: topa koş, gol pozisyonu al
             targetX = Math.min(95, ballX + 5);
-            targetY = base.y + (ballY - base.y) * 0.5;
+            targetY = base.y + (ballY - base.y) * 0.6;
           } else {
+            // Uzak: öne çık, boş alana koş
             targetX = base.x + 8;
-            targetY = base.y + (ballY - base.y) * 0.3;
+            targetY = base.y + (ballY - base.y) * 0.4;
           }
         } else {
-          // Savunma: top yakınsa pres
-          if (distToBall < 22) {
+          // Savunma: topa agresif pres
+          if (distToBall < 10) {
+            // Çok yakın: kovala
+            targetX = ballX;
+            targetY = ballY;
+          } else if (distToBall < 22) {
+            // Mid: topun önüne
             targetX = Math.max(base.x - 4, ballX - 2);
-            targetY = base.y + (ballY - base.y) * 0.5;
+            targetY = base.y + (ballY - base.y) * 0.7;
           } else {
+            // Uzak: geri dön
             targetX = base.x - 4;
-            targetY = base.y + (ballY - base.y) * 0.15;
+            targetY = base.y + (ballY - base.y) * 0.2;
           }
         }
       }
@@ -217,8 +238,9 @@ export function updatePositions(match) {
                       : p.position === 'DF' ? 0.9
                       : p.position === 'OS' ? 1.1
                       : 1.3; // FV
-      // Topa uzaklığa göre urgency
-      const urgency = distToBall < 15 ? 1.6
+      // Topa uzaklığa göre urgency (yakınsa çok hızlı)
+      const urgency = distToBall < 8 ? 2.2
+                    : distToBall < 15 ? 1.7
                     : distToBall < 25 ? 1.2
                     : distToBall < 40 ? 0.9
                     : 0.6; // uzak
