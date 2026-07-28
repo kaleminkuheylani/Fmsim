@@ -279,14 +279,14 @@ function resolveDribble(match, carrier) {
     .sort((a, b) => a.d - b.d)[0];
 
   if (!nearest || nearest.d > 10) {
-    // Kimse yakın değil — bazen kontrolsüz top auta
-    if (Math.random() < 0.05) {
-      match.ballPos.y = match.ballPos.y < 35 ? 3 : 67;
-      return outOfPlay(match, 'dribble_kontrolsuz', 'away', { actor: carrier.id });
-    }
-    // Serbest ilerle
+    // Kimse yakın değil — serbest ilerle
+    // (outOfPlay kaldırıldı: taç kaskadı yaratıyordu)
     const dirX = side === 'home' ? 15 : -15;
-    const newBall = { x: Math.max(0, Math.min(100, match.ballPos.x + dirX)), y: match.ballPos.y + (Math.random() - 0.5) * 4 };
+    const inwardY = match.ballPos.y < 35 ? 6 : -6;
+    const newBall = {
+      x: Math.max(0, Math.min(100, match.ballPos.x + dirX)),
+      y: Math.max(10, Math.min(60, match.ballPos.y + inwardY + (Math.random() - 0.5) * 3)),
+    };
     return {
       ok: true,
       events: [{
@@ -304,7 +304,12 @@ function resolveDribble(match, carrier) {
   const d = duel(carrier, nearest.p, 'dribbling', { action: 'dribble' });
   if (d.winner === 'a') {
     const dirX = side === 'home' ? 8 : -8;
-    const newBall = { x: Math.max(0, Math.min(100, match.ballPos.x + dirX)), y: nearest.p.live.y + (Math.random() - 0.5) * 6 };
+    // Geçilen oyuncudan uzak, içeri doğru
+    const passY = nearest.p.live.y + (side === 'home' ? -4 : 4);
+    const newBall = {
+      x: Math.max(0, Math.min(100, match.ballPos.x + dirX)),
+      y: Math.max(10, Math.min(60, passY + (Math.random() - 0.5) * 4)),
+    };
     return {
       ok: true,
       events: [{
@@ -319,9 +324,37 @@ function resolveDribble(match, carrier) {
     };
   }
 
-  // Top kaybedildi — bazen top auta çıkar (taç için)
-  if (Math.random() < 0.15) {
-    // Topu yan çizgiye doğru "fırlat" ki outOfPlay taça çevirsin
+  // Top kaybedildi — dağılım:
+  //  - %20 takım geri kazanır (top carrier'ın arkadaşına düşer)
+  //  - %5 taça çıkar (outOfPlay)
+  //  - %75 turnover (rakibe geçer)
+  const r = Math.random();
+  if (r < 0.20) {
+    // Takım geri kazanır — en yakın arkadaşa pas
+    const team = match[side];
+    const tm = team.players
+      .filter(p => p.onField && p.id !== carrier.id)
+      .map(p => ({ p, d: Math.hypot(p.live.x - match.ballPos.x, p.live.y - match.ballPos.y) }))
+      .sort((a, b) => a.d - b.d)[0];
+    if (tm) {
+      const newBall = { x: tm.p.live.x, y: tm.p.live.y };
+      return {
+        ok: true,
+        events: [{
+          minute: match.minute,
+          type: 'dribble_recovered',
+          side,
+          actor: carrier.id,
+          target: tm.p.id,
+          text: `${match.minute}' ${carrier.name} top kaybetti ama ${tm.p.name} kurtardı.`,
+        }],
+        newBall,
+        newCarrier: { side, playerId: tm.p.id },
+      };
+    }
+  }
+  if (r < 0.25) {
+    // Taç
     match.ballPos.y = match.ballPos.y < 35 ? 3 : 67;
     return outOfPlay(match, 'dripling_kayip', 'away', { actor: carrier.id, target: nearest.p.id });
   }
@@ -424,30 +457,38 @@ function outOfPlay(match, reason, newSide, extra = {}) {
 
   let eventType, eventText, newBall, newCarrier;
 
-  if (isTouchline) {
-    // === TAÇ ===
-    // newSide = atan taraf (topa son dokunan oyuncunun RAKİBİ)
-    // Top yan çizgiye yakın bir noktada, en yakın oyuncuya
-    const throwY = ballY < 35 ? 4 : 66;
-    const throwX = Math.max(8, Math.min(92, ballX));
-    const team = match[newSide];
-    const nearest = team.players
-      .filter(p => p.onField)
-      .map(p => ({ p, d: Math.hypot(p.live.x - throwX, p.live.y - throwY) }))
-      .sort((a, b) => a.d - b.d)[0];
-    newBall = { x: throwX, y: throwY };
-    newCarrier = nearest ? { side: newSide, playerId: nearest.p.id } : null;
-    eventType = 'throw_in';
-    eventText = `${match.minute}' Taç! ${match[newSide].name}`;
-  } else if (isGoalLine) {
-    // === KALE VURUŞU ===
-    // newSide = kale vuruşunu kullanacak takım (savunan)
-    const gkX = newSide === 'home' ? 8 : 92;
-    const gk = match[newSide].players.find(p => p.onField && p.position === 'GK');
-    newBall = { x: gkX, y: 35 };
-    newCarrier = gk ? { side: newSide, playerId: gk.id } : null;
-    eventType = 'goal_kick';
-    eventText = `${match.minute}' Kale vuruşu — ${match[newSide].name}`;
+  // SIRA ÖNEMLİ: önce kale çizgisi (köşe + kale vuruşu), sonra taç, sonra genel.
+  // (Eski sırada isTouchline önce geliyordu → kale direği yakınından çıkan top
+  //  throw_in oluyordu, corner'a hiç ulaşılmıyordu.)
+  if (isGoalLine) {
+    // === KORNER mi KALE VURUŞU mu? ===
+    // ballY orta (20-50) → kale vuruşu
+    const isCornerZone = ballY < 20 || ballY > 50;
+    if (isCornerZone) {
+      // === KORNER ===
+      // newSide = korneri kullanacak takım (hücum eden — topu çıkaran oyuncunun rakibi)
+      // Top yan çizgiye yakın + kale çizgisi yakınında
+      const cornerY = ballY < 35 ? 4 : 66;
+      const cornerX = ballX < 50 ? 2 : 98;
+      const team = match[newSide];
+      const nearest = team.players
+        .filter(p => p.onField)
+        .map(p => ({ p, d: Math.hypot(p.live.x - cornerX, p.live.y - cornerY) }))
+        .sort((a, b) => a.d - b.d)[0];
+      newBall = { x: cornerX, y: cornerY };
+      newCarrier = nearest ? { side: newSide, playerId: nearest.p.id } : null;
+      eventType = 'corner';
+      eventText = `${match.minute}' Korner — ${match[newSide].name}`;
+    } else {
+      // === KALE VURUŞU ===
+      // newSide = kale vuruşunu kullanacak takım (savunan)
+      const gkX = newSide === 'home' ? 8 : 92;
+      const gk = match[newSide].players.find(p => p.onField && p.position === 'GK');
+      newBall = { x: gkX, y: 35 };
+      newCarrier = gk ? { side: newSide, playerId: gk.id } : null;
+      eventType = 'goal_kick';
+      eventText = `${match.minute}' Kale vuruşu — ${match[newSide].name}`;
+    }
   } else {
     // === GENEL OUT (kaleci tutuşu, orta alan) ===
     newBall = { x: 50, y: 35 };
