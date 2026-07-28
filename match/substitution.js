@@ -180,6 +180,10 @@ export class SubstitutionEngine {
     inPlayer.onField = true;
     inPlayer.live = inPlayer.live || {};
     inPlayer.live.currentStamina = inPlayer.live.currentStamina ?? 100;
+    // Yeni giren oyuncuya formationPos atanmalı (yoksa hepsi aynı slot'a gider)
+    if (!inPlayer.formationPos) {
+      inPlayer.formationPos = { x: outPlayer.formationPos?.x ?? inPlayer.live.x, y: outPlayer.formationPos?.y ?? inPlayer.live.y };
+    }
 
     // Değişiklik kaydı
     const sub = {
