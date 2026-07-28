@@ -52,7 +52,7 @@ export function decisionWeights(player, match) {
 
   // 2) KISA PAS
   let passShort = 0.4; // her yerde makul
-  if (inBox) passShort = 0.3; // kutuda az tercih
+  if (inBox) passShort = 0.15; // kutuda az tercih, şut kazansın
   if (x < 30) passShort = 0.6; // geride güvenli oyun
   const passing = getEffective(player, 'passing');
   const vision = getEffective(player, 'vision');

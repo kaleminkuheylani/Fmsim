@@ -349,7 +349,7 @@ function decisionWeights(player, match) {
     shoot *= 0.3 + (longShots + shooting) / 250;
   }
   let passShort = 0.4;
-  if (inBox) passShort = 0.3;
+  if (inBox) passShort = 0.15;
   if (x < 30) passShort = 0.6;
   const passing = getEffective(player, "passing");
   const vision = getEffective(player, "vision");
@@ -634,11 +634,12 @@ function resolveShoot(match, carrier) {
   const saveAction = inBox ? "gkOneOnOne" : "reflexes";
   const saveCtx = { action: "save", distance: distanceToGoal };
   const shotSkill = getEffective(carrier, action, shootCtx);
-  const saveSkill = getEffective(keeper, saveAction, saveCtx);
-  const inBoxBonus = inBox ? 8 : 3;
-  const longShotBonus = !inBox && distanceToGoal > 20 ? 0 : 0;
-  const variance = (Math.random() - 0.5) * 18;
-  const isGoal = shotSkill + longShotBonus + variance > saveSkill + inBoxBonus;
+  const saveSkill = getEffective(keeper, saveAction, saveCtx) * 0.85;
+  const inBoxBonus = inBox ? 3 : 7;
+  const longShotBonus = !inBox && distanceToGoal > 20 ? -1 : 0;
+  const variance = (Math.random() - 0.5) * 20;
+  const shotBonus = inBox ? 4 : 0;
+  const isGoal = shotSkill + longShotBonus + shotBonus + variance > saveSkill + inBoxBonus;
   carrier.live.shots++;
   match.stats.shots[side]++;
   if (isGoal) {

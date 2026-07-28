@@ -207,14 +207,16 @@ function resolveShoot(match, carrier) {
   const saveCtx = { action: 'save', distance: distanceToGoal };
 
   // Basit kurtarış formülü: save_skill + bonus < shot_skill + bonus → gol
-  // InBox'ta kaleci +8 bonus (yakın mesafe bile riskli), uzak şutta kaleci +3 bonus
+  // Gerçekçi: kaleci iyi ama InBox'ta %30-35 gol, uzak %5-8
   const shotSkill = getEffective(carrier, action, shootCtx);
-  const saveSkill = getEffective(keeper, saveAction, saveCtx);
-  const inBoxBonus = inBox ? 8 : 3;
-  const longShotBonus = !inBox && distanceToGoal > 20 ? 0 : 0;
-  // Eşitlik durumunda kaleci kazansın, ama daha geniş varyans (dramatik gol/şans)
-  const variance = (Math.random() - 0.5) * 18;
-  const isGoal = (shotSkill + longShotBonus + variance) > (saveSkill + inBoxBonus);
+  const saveSkill = getEffective(keeper, saveAction, saveCtx) * 0.85; // kaleci dezavantaj
+  const inBoxBonus = inBox ? 3 : 7;
+  const longShotBonus = !inBox && distanceToGoal > 20 ? -1 : 0;
+  // Varyans
+  const variance = (Math.random() - 0.5) * 20;
+  // InBox'ta +4 hücum bonus
+  const shotBonus = inBox ? 4 : 0;
+  const isGoal = (shotSkill + longShotBonus + shotBonus + variance) > (saveSkill + inBoxBonus);
 
   carrier.live.shots++;
   match.stats.shots[side]++;
